@@ -19,23 +19,47 @@ const UI = {
     createInputField(config) {
         const tooltipAttr = config.tooltip ? `class="tooltip" data-tooltip="${config.tooltip}"` : '';
         const note = config.note ? `<div class="small-text" style="color: #27ae60; margin-top: 5px;">${config.note}</div>` : '';
+        const inputType = config.type || 'number';
+        const required = config.required ? 'required' : '';
         
-        return `
-            <div class="input-group">
-                <label for="${config.id}" ${tooltipAttr}>${config.label}</label>
-                <input type="number" 
-                       id="${config.id}" 
-                       value="${CONFIG.defaults[config.id] || 0}" 
-                       min="${config.min || 0}" 
-                       max="${config.max || 999999}"
-                       step="${config.step || 1}">
-                ${note}
-            </div>
-        `;
+        if (inputType === 'text') {
+            return `
+                <div class="input-group">
+                    <label for="${config.id}" ${tooltipAttr}>${config.label}</label>
+                    <input type="text" 
+                           id="${config.id}" 
+                           value="${CONFIG.defaults[config.id] || ''}" 
+                           ${required}
+                           placeholder="${config.placeholder || ''}">
+                    ${note}
+                </div>
+            `;
+        } else {
+            return `
+                <div class="input-group">
+                    <label for="${config.id}" ${tooltipAttr}>${config.label}</label>
+                    <input type="number" 
+                           id="${config.id}" 
+                           value="${CONFIG.defaults[config.id] || 0}" 
+                           min="${config.min || 0}" 
+                           max="${config.max || 999999}"
+                           step="${config.step || 1}">
+                    ${note}
+                </div>
+            `;
+        }
     },
 
     // Initialize input sections
     initializeInputs() {
+        // Project Information
+        const projectInfo = document.getElementById('project-info');
+        if (projectInfo) {
+            CONFIG.inputs.projectInfo.forEach(input => {
+                projectInfo.innerHTML += this.createInputField(input);
+            });
+        }
+
         // Team Configuration
         const teamConfig = document.getElementById('team-config');
         if (teamConfig) {

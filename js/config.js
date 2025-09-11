@@ -2,6 +2,7 @@
 const CONFIG = {
     // Default Values
     defaults: {
+        projectName: 'My Automation Project',
         teamSize: 5,
         hourlyRate: 35,
         devMonths: 3,
@@ -23,6 +24,15 @@ const CONFIG = {
 
     // Input Field Configurations
     inputs: {
+        projectInfo: [
+            {
+                id: 'projectName',
+                label: 'Project Name:',
+                tooltip: 'Name of the project or automation being analyzed',
+                type: 'text',
+                required: true
+            }
+        ],
         teamConfig: [
             {
                 id: 'teamSize',
@@ -125,7 +135,7 @@ const CONFIG = {
                 min: 1,
                 max: 60,
                 step: 1,
-                note: '✓ Fully automated after setup - no ongoing time required'
+                note: 'Fully automated after setup - no ongoing time required'
             },
             {
                 id: 'errorsPerMonth',

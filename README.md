@@ -1,10 +1,11 @@
 # ROI Calculator
 
-A professional web application for calculating the Return on Investment (ROI) of Sales Receipt Import Automation projects. This tool provides comprehensive financial analysis including cost-benefit calculations, payback period analysis, and 5-year projections.
+A professional web application for calculating the Return on Investment (ROI) of automation projects. This tool provides comprehensive financial analysis including cost-benefit calculations, payback period analysis, and 5-year projections.
 
 ## Features
 
 - **Interactive ROI Calculations** - Real-time calculations as you input parameters
+- **Project-Specific Analysis** - Customizable project names and parameters for multiple automation projects
 - **Comprehensive Analysis** - Covers development costs, time savings, error reduction, and operational benefits
 - **5-Year Projections** - Long-term financial forecasting with salary increase adjustments
 - **Professional Reports** - Generate detailed PDF-ready reports for stakeholders
@@ -55,6 +56,7 @@ ROI Calculator/
 ### Usage
 
 1. **Input Parameters:**
+   - Enter a project name to customize your analysis
    - Configure your team size and hourly rates
    - Enter development costs and timeline
    - Specify current manual process times
@@ -74,13 +76,13 @@ ROI Calculator/
 
 ### Time Savings
 - Calculates hours saved per user/month through automation
-- Accounts for elimination of manual processes:
-  - Report formatting
-  - Data corrections and QBES
-  - WooCommerce fee processing
-  - Webstore clearing reconciliation
-  - Tie-out processes
-  - ShareFile manual operations
+- Accounts for elimination of various manual processes:
+  - Report formatting and data export
+  - Data corrections and reconciliation
+  - Multi-source data processing
+  - File management operations
+  - Administrative tie-out processes
+  - Manual consolidation tasks
 
 ### Cost Analysis
 - **Labor Savings:** Hourly rate × time saved × team size
@@ -100,6 +102,7 @@ Edit `js/config.js` to change default input values:
 
 ```javascript
 defaults: {
+    projectName: 'My Automation Project',
     teamSize: 5,
     hourlyRate: 35,
     devMonths: 3,
@@ -144,6 +147,6 @@ For questions or support, please contact the development team.
 
 ---
 
-**Built for:** Sales Receipt Import Automation ROI Analysis  
+**Built for:** Automation Project ROI Analysis  
 **Technology:** Vanilla HTML5, CSS3, JavaScript (ES6+)  
 **Version:** 1.0.0

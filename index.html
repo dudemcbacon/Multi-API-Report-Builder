@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sales Receipt Import Automation - ROI Calculator</title>
+    <title>ROI Calculator</title>
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/print.css" media="print">
 </head>
@@ -13,14 +13,18 @@
         <div class="container" id="calculator-view">
             <header class="header">
                 <h1>ROI Calculator</h1>
-                <p>Sales Receipt Import Automation</p>
+                <p id="project-subtitle">Project ROI Analysis</p>
             </header>
 
             <main class="content">
                 <!-- Input Section -->
                 <section class="inputs-section">
-                    <div class="section-header">📊 Input Parameters</div>
+                    <div class="section-header">Input Parameters</div>
                     
+                    <div id="project-info" class="subsection">
+                        <h4>Project Information</h4>
+                    </div>
+
                     <div id="team-config" class="subsection">
                         <h4>Team Configuration</h4>
                     </div>
@@ -44,19 +48,19 @@
 
                 <!-- Results Section -->
                 <section class="results-section">
-                    <div class="section-header">📈 Calculated Results</div>
+                    <div class="section-header">Calculated Results</div>
                     <div id="results-container"></div>
                     
                     <div class="button-group">
-                        <button class="print-button" onclick="app.generateReport()">📄 Generate Full Report</button>
-                        <button class="print-button" onclick="window.print()">🖨️ Print Summary</button>
-                        <button class="print-button" onclick="app.printGeneratedReport()">🖨️ Print Generated Report</button>
+                        <button class="print-button" onclick="app.generateReport()">Generate Full Report</button>
+                        <button class="print-button" onclick="window.print()">Print Summary</button>
+                        <button class="print-button" onclick="app.printGeneratedReport()">Print Generated Report</button>
                     </div>
                 </section>
 
                 <!-- 5-Year Projection Section -->
                 <section class="results-section full-width">
-                    <div class="section-header">📊 5-Year Projection</div>
+                    <div class="section-header">5-Year Projection</div>
                     <div class="projection-table-container">
                         <table class="projection-table">
                             <thead>
@@ -93,7 +97,7 @@
 
                 <!-- Executive Summary Dashboard -->
                 <section class="dashboard">
-                    <h3>🎯 Executive Summary</h3>
+                    <h3>Executive Summary</h3>
                     <div class="dashboard-grid">
                         <div class="dashboard-item">
                             <h4>Monthly Impact</h4>

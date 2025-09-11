@@ -14,6 +14,9 @@ const Report = {
     buildReportHTML(results) {
         const { inputs, timeSavings, costSavings, roi, projection } = results;
         
+        // Get dynamic project name
+        const projectName = document.getElementById('projectName')?.value || 'My Automation Project';
+        
         // Calculate additional report metrics
         const totalManualHours = (inputs.manualExport + inputs.manualRecon + inputs.manualConsol + 
                                  inputs.webstoreClearing + inputs.tieOut + inputs.shareFileOps) * inputs.teamSize;
@@ -52,10 +55,10 @@ const Report = {
         return `
             <button class="print-button" onclick="app.showCalculator()">← Back to Calculator</button>
             
-            <h1>Sales Receipt Import Automation - ROI Analysis Report</h1>
+            <h1>${projectName} - ROI Analysis Report</h1>
 
             <h2>Executive Summary</h2>
-            <p>The Sales Receipt Import Automation is a multi-API data integration that delivers significant ROI through
+            <p>The ${projectName} is a multi-API data integration that delivers significant ROI through
                 automation of financial operations, reduction in manual data processing, and elimination of errors in
                 reconciliation tasks. This customized analysis is based on your specific organizational parameters.</p>
 
@@ -232,7 +235,7 @@ const Report = {
 
             <h2>Implementation Recommendation</h2>
             <div class="metrics-box">
-                <p>Based on your specific parameters, the Sales Receipt Import Automation delivers:</p>
+                <p>Based on your specific parameters, the ${projectName} delivers:</p>
                 <ul>
                     <li><strong>Immediate monthly savings:</strong> ${UI.formatCurrency(costSavings.monthlyTeamSavings)}</li>
                     <li><strong>Annual savings:</strong> ${UI.formatCurrency(costSavings.annualTeamSavings)}</li>
