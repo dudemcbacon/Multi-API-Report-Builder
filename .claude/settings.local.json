@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "WebFetch(domain:developer.salesforce.com)",
+      "Bash(cd:*)",
+      "Bash(pip3 install:*)",
+      "Bash(mkdir:*)",
+      "Bash(python:*)",
+      "Bash(find:*)",
+      "Bash(rm:*)",
+      "Read(/C:\\Users\\Quinn\\OneDrive - CompanyName\\Desktop\\Projects\\Operations\\SalesForceReportPull/**)",
+      "Bash(git add:*)",
+      "WebFetch(domain:developer.quickbase.com)",
+      "WebSearch",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:github.com)",
+      "Bash(timeout:*)",
+      "Read(/~/.config/SalesforceReportPull/**)",
+      "Bash(taskkill:*)",
+      "Bash(tasklist)",
+      "Bash(findstr:*)"
+    ],
+    "deny": []
+  }
+}
