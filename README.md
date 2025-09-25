@@ -5,7 +5,7 @@ A powerful PyQt6-based desktop application for integrating and analyzing data fr
 ## Features
 
 ### Multi-API Integration
-- **Salesforce**: Access reports and data with OAuth2 authentication
+- **Salesforce**: Access reports and data with JWT Bearer Flow authentication
 - **WooCommerce**: Retrieve products, orders, customers, and more via REST API
 - **Avalara**: Fetch tax transactions and compliance data
 - **QuickBase**: Query tables and reports with field metadata support
@@ -62,15 +62,16 @@ pip install -r requirements.txt
 Create a `.env` file in the project root with your API credentials:
 
 ```env
-# Salesforce Configuration
-SALESFORCE_CLIENT_ID=your_client_id
-SALESFORCE_CLIENT_SECRET=your_client_secret
-SALESFORCE_REDIRECT_URI=http://localhost:8080/callback
+# Salesforce JWT Configuration
+SF_CLIENT_ID=your_client_id
+SF_JWT_SUBJECT=your_username@company.com
+SF_JWT_KEY_PATH=./salesforce_private.key
+SF_JWT_KEY_ID=optional_key_id
 
 # WooCommerce Configuration
-WOOCOMMERCE_URL=https://your-store.com
-WOOCOMMERCE_CONSUMER_KEY=your_consumer_key
-WOOCOMMERCE_CONSUMER_SECRET=your_consumer_secret
+WOO_STORE_URL=https://your-store.com
+WOO_CONSUMER_KEY=your_consumer_key
+WOO_CONSUMER_SECRET=your_consumer_secret
 
 # Avalara Configuration
 AVALARA_ACCOUNT_ID=your_account_id
@@ -79,10 +80,38 @@ AVALARA_COMPANY_CODE=your_company_code
 AVALARA_ENVIRONMENT=sandbox  # or production
 
 # QuickBase Configuration
-QUICKBASE_REALM_HOSTNAME=your-realm.quickbase.com
-QUICKBASE_USER_TOKEN=your_user_token
-QUICKBASE_APP_ID=your_app_id
+QB_REALM_HOSTNAME=your-realm.quickbase.com
+QB_USER_TOKEN=your_user_token
+QB_APP_ID=your_app_id
 ```
+
+### Salesforce JWT Setup
+
+JWT Bearer Flow requires additional setup in Salesforce:
+
+1. **Generate RSA Key Pair**:
+```bash
+# Generate private key
+openssl genrsa -out salesforce_private.key 2048
+
+# Extract public key (for Salesforce)
+openssl rsa -in salesforce_private.key -pubout -out salesforce_public.key
+```
+
+2. **Create Salesforce Connected App**:
+   - Go to Setup → App Manager → New Connected App
+   - Fill in basic information
+   - Enable API (Enable OAuth Settings)
+   - Enable "Use Digital Signatures" and upload the public key
+   - Select OAuth Scopes: "Full access (full)"
+   - Save and note the Consumer Key (Client ID)
+
+3. **Configure Connected App Policies**:
+   - Go to Setup → Connected Apps → Manage Connected Apps
+   - Edit your Connected App → Edit Policies
+   - Permitted Users: "Admin approved users are pre-authorized"
+   - IP Relaxation: "Relax IP restrictions"
+   - Assign to user profiles/permission sets
 
 ## Usage
 
@@ -120,7 +149,7 @@ python launch.py
 Multi-API-Report-Builder/
 ├── src/
 │   ├── services/          # API service implementations
-│   │   ├── async_salesforce_api.py
+│   │   ├── async_jwt_salesforce_api.py
 │   │   ├── async_woocommerce_api.py
 │   │   ├── async_avalara_api.py
 │   │   └── async_quickbase_api.py
@@ -134,9 +163,10 @@ Multi-API-Report-Builder/
 │   │   │   └── tree_population_manager.py
 │   │   ├── tabs/           # Tab implementations
 │   │   └── operations/     # Business operations
-│   ├── config/
-│   │   └── app_config.py   # Application configuration
+│   ├── models/
+│   │   └── config.py       # Pydantic configuration models
 │   └── utils/              # Utility functions
+│       └── jwt_utils.py    # JWT token generation
 ├── tests/                  # Test suite
 ├── docs/                   # Documentation
 ├── requirements.txt        # Python dependencies
@@ -148,19 +178,21 @@ Multi-API-Report-Builder/
 
 - **PyQt6**: Desktop GUI framework
 - **Polars**: High-performance DataFrame library
-- **aiohttp**: Async HTTP client
-- **quickbase-client**: QuickBase API integration
-- **simple-salesforce**: Salesforce API wrapper
+- **aiohttp**: Async HTTP client for API requests
+- **PyJWT**: JWT token generation for Salesforce authentication
+- **Pydantic**: Configuration management with validation
+- **keyring**: Secure credential storage
 - **python-dotenv**: Environment variable management
 - **QDarkStyle**: Dark theme styling
 
 ## API-Specific Features
 
 ### Salesforce
-- OAuth2 authentication flow
+- JWT Bearer Flow authentication (server-to-server)
 - Report and dashboard access
 - SOQL query support
 - Metadata caching for performance
+- RSA certificate-based security
 
 ### WooCommerce
 - REST API v3 support
@@ -230,11 +262,16 @@ For issues and questions, please open an issue on [GitHub](https://github.com/Qu
 ## Changelog
 
 ### Latest Updates
-- Added QuickBase API integration
-- Fixed field headers to show descriptive names
-- Optimized tree population to prevent race conditions
-- Improved connection management for all APIs
-- Enhanced error handling and logging
+- **BREAKING CHANGE**: Migrated Salesforce authentication from OAuth 2.0 to JWT Bearer Flow
+- Complete removal of browser-based authentication dependency
+- Added comprehensive JWT token generation and validation
+- Added QuickBase API integration with field metadata support
+- Fixed field headers to show descriptive names instead of numeric IDs
+- Optimized tree population to prevent race conditions and redundant updates
+- Enhanced connection management with automatic session restoration
+- Improved error handling, logging, and user feedback
+- Updated all environment variables for consistency
+- Complete codebase cleanup and documentation updates
 
 ## Author
 
