@@ -28,7 +28,7 @@ class MetadataCacheManager:
         if cache_dir is None:
             # Use default cache directory
             home = Path.home()
-            cache_dir = home / '.config' / 'SalesforceReportPull' / 'cache'
+            cache_dir = home / '.config' / 'Multi API Report Builder' / 'cache'
         
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)

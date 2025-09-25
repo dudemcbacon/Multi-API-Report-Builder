@@ -29,7 +29,8 @@
       "Bash(powershell:*)",
       "WebFetch(domain:helpv2.quickbase.com)",
       "WebFetch(domain:help.quickbase.com)",
-      "WebFetch(domain:quickbase-client.readthedocs.io)"
+      "WebFetch(domain:quickbase-client.readthedocs.io)",
+      "Read(/~/OneDrive - CompanyName/Desktop/Projects/Operations/Operations Automation Tool/**)"
     ],
     "deny": []
   }

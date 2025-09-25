@@ -19,21 +19,24 @@ class SalesforceEnvironment(str, Enum):
 
 class AuthMethod(str, Enum):
     """Authentication methods"""
-    BROWSER_OAUTH = "browser_oauth"
-    USERNAME_PASSWORD = "username_password"
+    JWT_BEARER = "jwt_bearer"
 
 class SalesforceConfig(BaseModel):
     """Salesforce configuration"""
     model_config = ConfigDict(use_enum_values=True)
-    
-    username: str = Field(default="", description="Salesforce username for password authentication")
+
+    # JWT Authentication (Primary)
+    consumer_key: Optional[str] = Field(default=None, description="Consumer key from Connected App")
+    jwt_subject: Optional[str] = Field(default=None, description="JWT subject (username/email)")
+    jwt_key_path: Optional[str] = Field(default=None, description="Path to private key file for JWT signing")
+    jwt_key_id: Optional[str] = Field(default=None, description="Optional key ID for certificate")
+
+    # General Settings
     environment: SalesforceEnvironment = Field(default=SalesforceEnvironment.PRODUCTION, description="Environment type")
-    auth_method: AuthMethod = Field(default=AuthMethod.BROWSER_OAUTH, description="Authentication method")
+    auth_method: AuthMethod = Field(default=AuthMethod.JWT_BEARER, description="Authentication method")
     instance_url: Optional[str] = Field(default=None, description="Custom instance URL")
-    api_version: str = Field(default="58.0", description="Salesforce API version")
-    consumer_key: Optional[str] = Field(default=None, description="Consumer key for OAuth")
-    consumer_secret: Optional[str] = Field(default=None, description="Consumer secret for OAuth (optional for PKCE)")
-    has_stored_tokens: bool = Field(default=False, description="Whether OAuth tokens are stored securely")
+    api_version: str = Field(default="63.0", description="Salesforce API version")
+
     
     @property
     def login_url(self) -> str:
@@ -136,12 +139,10 @@ class ConfigManager:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
                     
-                # Migrate old auth method values
+                # Ensure JWT Bearer authentication
                 if 'salesforce' in config_data and config_data['salesforce']:
                     sf_config = config_data['salesforce']
-                    if sf_config.get('auth_method') in ['jwt_bearer', 'jwt']:
-                        sf_config['auth_method'] = 'browser_oauth'
-                        logger.info("Migrated JWT auth method to Browser OAuth")
+                    sf_config['auth_method'] = 'jwt_bearer'
                     
                 # Load sensitive data from keyring
                 config_data = self._load_credentials_from_keyring(config_data)
@@ -165,24 +166,39 @@ class ConfigManager:
     def _load_credentials_from_keyring(self, config_data: Dict[str, Any]) -> Dict[str, Any]:
         """Load sensitive credentials from keyring"""
         try:
-            # Load Salesforce credentials
-            if 'salesforce' in config_data and config_data['salesforce']:
-                username = config_data['salesforce'].get('username')
-                if username:
-                    # For OAuth, tokens are managed by AuthManager
-                    # Consumer key and secret could be stored here if needed
-                    consumer_key = keyring.get_password(self.keyring_service, f"sf_{username}_consumer_key")
-                    consumer_secret = keyring.get_password(self.keyring_service, f"sf_{username}_consumer_secret")
-                    if consumer_key:
-                        config_data['salesforce']['consumer_key'] = consumer_key
-                    if consumer_secret:
-                        config_data['salesforce']['consumer_secret'] = consumer_secret
-                
-                # Load from environment variables if not in keyring
-                if not config_data['salesforce'].get('consumer_key'):
-                    config_data['salesforce']['consumer_key'] = os.getenv('SF_CONSUMER_KEY')
-                if not config_data['salesforce'].get('consumer_secret'):
-                    config_data['salesforce']['consumer_secret'] = os.getenv('SF_CONSUMER_SECRET')
+            # Initialize empty salesforce config if needed
+            if not config_data.get('salesforce'):
+                config_data['salesforce'] = {}
+
+            # Load Salesforce JWT credentials
+            sf_config = config_data['salesforce']
+
+            # Load JWT credentials from keyring
+            jwt_subject = sf_config.get('jwt_subject')
+            if jwt_subject:
+                consumer_key = keyring.get_password(self.keyring_service, f"sf_{jwt_subject}_consumer_key")
+                jwt_key_path = keyring.get_password(self.keyring_service, f"sf_{jwt_subject}_jwt_key_path")
+                jwt_key_id = keyring.get_password(self.keyring_service, f"sf_{jwt_subject}_jwt_key_id")
+
+                if consumer_key:
+                    sf_config['consumer_key'] = consumer_key
+                if jwt_key_path:
+                    sf_config['jwt_key_path'] = jwt_key_path
+                if jwt_key_id:
+                    sf_config['jwt_key_id'] = jwt_key_id
+
+            # Load from environment variables if not in keyring
+            if not sf_config.get('consumer_key'):
+                sf_config['consumer_key'] = os.getenv('SF_CLIENT_ID')
+            if not sf_config.get('jwt_subject'):
+                sf_config['jwt_subject'] = os.getenv('SF_JWT_SUBJECT')
+            if not sf_config.get('jwt_key_path'):
+                sf_config['jwt_key_path'] = os.getenv('SF_JWT_KEY_PATH')
+            if not sf_config.get('jwt_key_id'):
+                sf_config['jwt_key_id'] = os.getenv('SF_JWT_KEY_ID')
+
+            # Update the main config_data with JWT credentials from environment
+            config_data['salesforce'].update(sf_config)
             
             # Load WooCommerce credentials
             if 'woocommerce' in config_data and config_data['woocommerce']:
@@ -213,15 +229,30 @@ class ConfigManager:
     def _save_credentials_to_keyring(self, config: ApplicationConfig):
         """Save sensitive credentials to keyring"""
         try:
+            # Save Salesforce JWT credentials
+            if config.salesforce and config.salesforce.jwt_subject:
+                if config.salesforce.consumer_key:
+                    keyring.set_password(self.keyring_service,
+                                       f"sf_{config.salesforce.jwt_subject}_consumer_key",
+                                       config.salesforce.consumer_key)
+                if config.salesforce.jwt_key_path:
+                    keyring.set_password(self.keyring_service,
+                                       f"sf_{config.salesforce.jwt_subject}_jwt_key_path",
+                                       config.salesforce.jwt_key_path)
+                if config.salesforce.jwt_key_id:
+                    keyring.set_password(self.keyring_service,
+                                       f"sf_{config.salesforce.jwt_subject}_jwt_key_id",
+                                       config.salesforce.jwt_key_id)
+
             # Save WooCommerce credentials
             if config.woocommerce:
-                keyring.set_password(self.keyring_service, 
-                                   f"woo_{config.woocommerce.store_url}_key", 
+                keyring.set_password(self.keyring_service,
+                                   f"woo_{config.woocommerce.store_url}_key",
                                    config.woocommerce.consumer_key)
-                keyring.set_password(self.keyring_service, 
-                                   f"woo_{config.woocommerce.store_url}_secret", 
+                keyring.set_password(self.keyring_service,
+                                   f"woo_{config.woocommerce.store_url}_secret",
                                    config.woocommerce.consumer_secret)
-            
+
             # Save Avalara credentials
             if config.avalara:
                 keyring.set_password(self.keyring_service,
@@ -245,10 +276,18 @@ class ConfigManager:
             config_dict = self._config.to_dict()
             
             # Remove sensitive data before saving to file
+            if config_dict.get('salesforce'):
+                if config_dict['salesforce'].get('consumer_key'):
+                    config_dict['salesforce']['consumer_key'] = '***'
+                if config_dict['salesforce'].get('jwt_key_path'):
+                    config_dict['salesforce']['jwt_key_path'] = '***'
+                if config_dict['salesforce'].get('jwt_key_id'):
+                    config_dict['salesforce']['jwt_key_id'] = '***'
+
             if config_dict.get('woocommerce'):
                 config_dict['woocommerce']['consumer_key'] = '***'
                 config_dict['woocommerce']['consumer_secret'] = '***'
-            
+
             if config_dict.get('avalara'):
                 config_dict['avalara']['license_key'] = '***'
 
@@ -296,13 +335,21 @@ class ConfigManager:
         """Clear all stored credentials"""
         try:
             # Clear keyring entries
+            if self._config.salesforce and self._config.salesforce.jwt_subject:
+                try:
+                    keyring.delete_password(self.keyring_service, f"sf_{self._config.salesforce.jwt_subject}_consumer_key")
+                    keyring.delete_password(self.keyring_service, f"sf_{self._config.salesforce.jwt_subject}_jwt_key_path")
+                    keyring.delete_password(self.keyring_service, f"sf_{self._config.salesforce.jwt_subject}_jwt_key_id")
+                except keyring.errors.PasswordDeleteError:
+                    pass
+
             if self._config.woocommerce:
                 try:
                     keyring.delete_password(self.keyring_service, f"woo_{self._config.woocommerce.store_url}_key")
                     keyring.delete_password(self.keyring_service, f"woo_{self._config.woocommerce.store_url}_secret")
                 except keyring.errors.PasswordDeleteError:
                     pass
-            
+
             if self._config.avalara:
                 try:
                     keyring.delete_password(self.keyring_service, f"avalara_{self._config.avalara.account_id}_license")
@@ -321,10 +368,18 @@ class ConfigManager:
             config_dict = self._config.to_dict()
             
             # Remove sensitive data
+            if config_dict.get('salesforce'):
+                if config_dict['salesforce'].get('consumer_key'):
+                    config_dict['salesforce']['consumer_key'] = '***'
+                if config_dict['salesforce'].get('jwt_key_path'):
+                    config_dict['salesforce']['jwt_key_path'] = '***'
+                if config_dict['salesforce'].get('jwt_key_id'):
+                    config_dict['salesforce']['jwt_key_id'] = '***'
+
             if config_dict.get('woocommerce'):
                 config_dict['woocommerce']['consumer_key'] = '***'
                 config_dict['woocommerce']['consumer_secret'] = '***'
-            
+
             if config_dict.get('avalara'):
                 config_dict['avalara']['license_key'] = '***'
 

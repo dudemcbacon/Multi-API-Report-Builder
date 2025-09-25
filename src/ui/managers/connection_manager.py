@@ -6,11 +6,11 @@ import logging
 from typing import Optional, Dict, Any, Callable
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from src.services.async_salesforce_api import AsyncSalesforceAPI
+from src.services.async_jwt_salesforce_api import AsyncJWTSalesforceAPI
 from src.services.async_woocommerce_api import AsyncWooCommerceAPI
 from src.services.async_avalara_api import AsyncAvalaraAPI
 from src.services.async_quickbase_api import AsyncQuickBaseAPI
-from src.services.auth_manager import SalesforceAuthManager
+# JWT authentication doesn't require separate auth manager
 from src.models.config import ConfigManager
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ class ConnectionManager(QObject):
         self.config = config_manager.get_config()
         
         # API instances
-        self.sf_api: Optional[AsyncSalesforceAPI] = None
+        self.sf_api: Optional[AsyncJWTSalesforceAPI] = None
         self.woo_api: Optional[AsyncWooCommerceAPI] = None
         self.avalara_api: Optional[AsyncAvalaraAPI] = None
         self.quickbase_api: Optional[AsyncQuickBaseAPI] = None
@@ -47,13 +47,16 @@ class ConnectionManager(QObject):
     def _initialize_apis(self):
         """Initialize API instances based on configuration"""
         try:
-            # Initialize Salesforce API
+            # Initialize Salesforce JWT API
             if self.config.salesforce:
-                logger.info("[CONNECTION-MANAGER] Initializing Salesforce API")
-                self.sf_api = AsyncSalesforceAPI(
+                logger.info("[CONNECTION-MANAGER] Initializing Salesforce JWT API")
+                self.sf_api = AsyncJWTSalesforceAPI(
                     instance_url=self.config.salesforce.login_url,
                     consumer_key=self.config.salesforce.consumer_key,
-                    consumer_secret=self.config.salesforce.consumer_secret,
+                    jwt_subject=self.config.salesforce.jwt_subject,
+                    jwt_key_path=self.config.salesforce.jwt_key_path,
+                    jwt_key_id=self.config.salesforce.jwt_key_id,
+                    sandbox=self.config.salesforce.environment == 'sandbox',
                     verbose_logging=False
                 )
             
@@ -200,44 +203,37 @@ class ConnectionManager(QObject):
     
     async def restore_salesforce_session(self) -> bool:
         """
-        Restore Salesforce session from stored credentials
-        
+        Restore Salesforce session using JWT authentication
+
         Returns:
             True if session restored successfully
         """
         try:
-            logger.info("[CONNECTION-MANAGER] Restoring Salesforce session")
-            
+            logger.info("[CONNECTION-MANAGER] Restoring Salesforce JWT session")
+
             if not self.sf_api:
                 logger.error("[CONNECTION-MANAGER] No Salesforce API instance")
                 return False
-            
-            # Check if we have an existing auth manager with valid credentials
-            if hasattr(self.sf_api, 'auth_manager') and self.sf_api.auth_manager:
-                auth_manager = self.sf_api.auth_manager
-                
-                # Check if we have stored credentials
-                if auth_manager.has_credentials():
-                    logger.info("[CONNECTION-MANAGER] Found stored credentials")
-                    
-                    # Test the connection
-                    result = await self.test_connection('salesforce')
-                    
-                    if result.get('success'):
-                        logger.info("[CONNECTION-MANAGER] Salesforce session restored successfully")
-                        return True
-                    else:
-                        logger.warning("[CONNECTION-MANAGER] Stored credentials invalid")
-                        return False
+
+            # Check if we have JWT credentials configured
+            if self.sf_api.has_credentials():
+                logger.info("[CONNECTION-MANAGER] Found JWT credentials")
+
+                # Test the connection (will authenticate automatically)
+                result = await self.test_connection('salesforce')
+
+                if result.get('success'):
+                    logger.info("[CONNECTION-MANAGER] Salesforce JWT session restored successfully")
+                    return True
                 else:
-                    logger.info("[CONNECTION-MANAGER] No stored credentials found")
+                    logger.warning("[CONNECTION-MANAGER] JWT authentication failed")
                     return False
             else:
-                logger.info("[CONNECTION-MANAGER] No auth manager available")
+                logger.info("[CONNECTION-MANAGER] No JWT credentials configured")
                 return False
-                
+
         except Exception as e:
-            logger.error(f"[CONNECTION-MANAGER] Error restoring Salesforce session: {e}")
+            logger.error(f"[CONNECTION-MANAGER] Error restoring Salesforce JWT session: {e}")
             return False
     
     async def restore_woocommerce_session(self) -> bool:

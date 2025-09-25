@@ -173,22 +173,29 @@ class SalesReceiptImport(BaseOperation):
         """Fetch Salesforce report data with date filter using async API"""
         try:
             # Import async API
-            from ...services.async_salesforce_api import AsyncSalesforceAPI
+            from ...services.async_jwt_salesforce_api import AsyncJWTSalesforceAPI
             
             # Get authentication details from the existing sf_api instance
             if not self.sf_api:
                 logger.error("No Salesforce API instance available")
                 return None
                 
-            # Get the auth manager from the existing API
-            auth_manager = self.sf_api.auth_manager
-            if not auth_manager:
-                logger.error("No auth manager available from Salesforce API")
+            # Check if we have JWT credentials configured
+            if not self.sf_api.has_credentials():
+                logger.error("No JWT credentials configured for Salesforce API")
                 return None
                 
             # Create async API instance with existing auth manager and optimized settings
             # This ensures both APIs share the same authentication state
-            async with AsyncSalesforceAPI(auth_manager=auth_manager, verbose_logging=False) as sf_api:
+            # JWT API doesn't use auth_manager - get credentials from existing sf_api
+            async with AsyncJWTSalesforceAPI(
+                consumer_key=self.sf_api.consumer_key,
+                jwt_subject=self.sf_api.jwt_subject,
+                jwt_key_path=self.sf_api.jwt_key_path,
+                jwt_key_id=self.sf_api.jwt_key_id,
+                sandbox=self.sf_api.login_url == "https://test.salesforce.com",
+                verbose_logging=False
+            ) as sf_api:
                 # Try to apply server-side filtering first with the known date field
                 logger.info(f"Attempting to filter Salesforce data by date range: {start_date} to {end_date}")
                 

@@ -18,7 +18,7 @@ import qtawesome as qta
 import qdarkstyle
 
 from src.models.config import ConfigManager, SalesforceConfig
-from src.services.async_salesforce_api import AsyncSalesforceAPI
+from src.services.async_jwt_salesforce_api import AsyncJWTSalesforceAPI
 from src.services.async_woocommerce_api import AsyncWooCommerceAPI
 from src.services.async_avalara_api import AsyncAvalaraAPI
 from src.services.async_quickbase_api import AsyncQuickBaseAPI
@@ -48,7 +48,7 @@ class MainWindow(QMainWindow):
         self._async_runner = None
         
         # API instances will be managed by ConnectionManager
-        self.sf_api: Optional[AsyncSalesforceAPI] = None
+        self.sf_api: Optional[AsyncJWTSalesforceAPI] = None
         self.woo_api: Optional[AsyncWooCommerceAPI] = None
         self.avalara_api: Optional[AsyncAvalaraAPI] = None
         self.quickbase_api: Optional[AsyncQuickBaseAPI] = None
@@ -505,18 +505,17 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
         
-        # Initialize existing API instances for auth reuse - check for valid tokens first
-        self.restore_salesforce_session()
+        # Initialize existing API instances - JWT auth doesn't need session restoration
         self.restore_woocommerce_session()
         self.initialize_avalara_api()
         self.initialize_quickbase_api()
         
-        # Log token status for transparency
-        if self.sf_api and hasattr(self.sf_api, 'auth_manager'):
-            if self.sf_api.auth_manager.is_token_valid():
-                logger.info("[ASYNC-AUTO-CONNECT] Salesforce has valid token - will reuse")
+        # Log JWT authentication status for transparency
+        if self.sf_api and hasattr(self.sf_api, 'is_authenticated'):
+            if self.sf_api.is_authenticated():
+                logger.info("[ASYNC-AUTO-CONNECT] Salesforce JWT authenticated - will reuse")
             else:
-                logger.info("[ASYNC-AUTO-CONNECT] Salesforce token invalid or missing - may need re-auth")
+                logger.info("[ASYNC-AUTO-CONNECT] Salesforce not authenticated - may need JWT authentication")
         
         # Start async worker with optimizations
         self.auto_connect_worker = AsyncAutoConnectWorker(
@@ -677,23 +676,23 @@ class MainWindow(QMainWindow):
         avalara_status = "✓" if avalara_connected else "✗"
         quickbase_status = "✓" if quickbase_connected else "✗"
         
-        # Add token status for Salesforce
-        sf_token_info = ""
-        if sf_connected and self.sf_api and hasattr(self.sf_api, 'auth_manager'):
-            if self.sf_api.auth_manager.is_token_valid():
-                sf_token_info = " (token valid)"
+        # Add authentication status for Salesforce
+        sf_auth_info = ""
+        if sf_connected and self.sf_api and hasattr(self.sf_api, 'is_authenticated'):
+            if self.sf_api.is_authenticated():
+                sf_auth_info = " (authenticated)"
             else:
-                sf_token_info = " (token expired)"
-                sf_status = "⚠"  # Warning symbol for expired token
-        
-        status_text = f"SF: {sf_status}{sf_token_info}  WC: {woo_status}  AV: {avalara_status}  QB: {quickbase_status}"
+                sf_auth_info = " (not authenticated)"
+                sf_status = "⚠"  # Warning symbol for not authenticated
+
+        status_text = f"SF: {sf_status}{sf_auth_info}  WC: {woo_status}  AV: {avalara_status}  QB: {quickbase_status}"
 
         # Count connected APIs for color determination
         connected_count = sum([sf_connected, woo_connected, avalara_connected, quickbase_connected])
 
         if connected_count == 4:
-            # Check if Salesforce token is actually valid
-            if self.sf_api and hasattr(self.sf_api, 'auth_manager') and not self.sf_api.auth_manager.is_token_valid():
+            # Check if Salesforce is actually authenticated
+            if self.sf_api and hasattr(self.sf_api, 'is_authenticated') and not self.sf_api.is_authenticated():
                 color = "orange"
             else:
                 color = "green"
@@ -753,82 +752,41 @@ class MainWindow(QMainWindow):
     
     
     def restore_salesforce_session(self):
-        """Restore Salesforce session if stored credentials exist"""
+        """Restore Salesforce session using JWT authentication"""
         logger.info("[SESSION-RESTORE] " + "=" * 50)
-        logger.info("[SESSION-RESTORE] Attempting to restore Salesforce session")
+        logger.info("[SESSION-RESTORE] Attempting to restore Salesforce JWT session")
         logger.info("[SESSION-RESTORE] " + "=" * 50)
-        
+
         try:
-            # Check if we already have a valid API instance with valid tokens
-            if self.sf_api and hasattr(self.sf_api, 'auth_manager'):
-                if self.sf_api.auth_manager.is_token_valid():
-                    logger.info("[SESSION-RESTORE] Current Salesforce API has valid token - keeping existing instance")
-                    return
-                else:
-                    logger.info("[SESSION-RESTORE] Current Salesforce API token invalid - will keep instance but may need re-auth")
-                    return
-            
             # Use ConnectionManager's API instance instead of creating new ones
             if not self.sf_api:
                 self.sf_api = self.connection_manager.get_api_instance('salesforce')
-                logger.info("[SESSION-RESTORE] Using ConnectionManager's Salesforce API instance")
+                logger.info("[SESSION-RESTORE] Using ConnectionManager's Salesforce JWT API instance")
+
+            # Check if we have a JWT API instance and it's authenticated
+            if self.sf_api and hasattr(self.sf_api, 'is_authenticated'):
+                if self.sf_api.is_authenticated():
+                    logger.info("[SESSION-RESTORE] JWT API already authenticated - keeping existing instance")
+                    self.sf_connected = True
+                    self.update_unified_connection_status(self.sf_connected, self.woo_connected, self.avalara_connected, self.quickbase_connected)
+                    return
+                else:
+                    logger.info("[SESSION-RESTORE] JWT API not authenticated - will test connection")
             
-            # Check if we have stored credentials
+            # Check if we have stored credentials and set up API instance
             if self.sf_api:
                 logger.info("[SESSION-RESTORE] Checking for stored credentials...")
                 has_creds = self.sf_api.has_credentials()
                 logger.info(f"[SESSION-RESTORE] Has credentials: {has_creds}")
-                
+
                 if has_creds:
-                    logger.info("[SESSION-RESTORE] Found stored credentials - testing session...")
-                    
-                    # Test the stored session using async wrapper
-                    def handle_session_test_result(result):
-                        if result.get('success', False):
-                            logger.info("[SESSION-RESTORE] SUCCESS Session restored successfully")
-                            
-                            # Update connection state tracking
-                            self.sf_connected = True
-                            
-                            # Clear metadata cache on reconnection
-                            if hasattr(self.source_data_tab, 'clear_metadata_cache'):
-                                self.source_data_tab.clear_metadata_cache()
-                            
-                            # Update unified connection status
-                            self.update_unified_connection_status(self.sf_connected, self.woo_connected, self.avalara_connected, self.quickbase_connected)
-                            
-                            # Enable the load reports button and automatically load reports
-                            logger.info("[SESSION-RESTORE] Auto-loading reports from restored session...")
-                            self.load_salesforce_reports()
-                            
-                            logger.info("[SESSION-RESTORE] SUCCESS Session restoration completed")
-                        else:
-                            logger.warning(f"[SESSION-RESTORE] Session test failed: {result.get('error', 'Unknown error')}")
-                            self.sf_connected = False
-                            self._set_sf_disconnected_state()
-                    
-                    # Use AsyncAutoConnectWorker for proper async execution
-                    self.auto_connect_worker = AsyncAutoConnectWorker(
-                        self.config,
-                        sf_api_instance=self.sf_api,
-                        woo_api_instance=None  # Only test SF for session restore
-                    )
-                    
-                    def handle_worker_result(results):
-                        if results.get('sf_connected'):
-                            handle_session_test_result({'success': True})
-                        else:
-                            handle_session_test_result({'success': False, 'error': 'Connection failed'})
-                    
-                    self.auto_connect_worker.connection_completed.connect(handle_worker_result)
-                    self.auto_connect_worker.start()
-                    return True  # Return immediately since async
+                    logger.info("[SESSION-RESTORE] Found JWT credentials - ready for connection testing")
+                    logger.info("[SESSION-RESTORE] Connection testing will be handled by main auto-connect worker")
+                    return True  # Credentials available, let main worker handle connection
                 else:
-                    logger.info("[SESSION-RESTORE] No stored credentials found")
-                    # Fall through to show disconnected state
+                    logger.info("[SESSION-RESTORE] No JWT credentials found")
             else:
-                logger.info("[SESSION-RESTORE] No API instance available")
-                # Fall through to show disconnected state
+                logger.info("[SESSION-RESTORE] No Salesforce API instance available")
                 
         except Exception as e:
             logger.error(f"[SESSION-RESTORE] ERROR Session restoration failed: {e}")
@@ -859,46 +817,11 @@ class MainWindow(QMainWindow):
                 self.woo_api = self.connection_manager.get_api_instance('woocommerce')
                 logger.info("[WOO-RESTORE] Using ConnectionManager's WooCommerce API instance")
             
-            # Test the connection
+            # Set up WooCommerce API instance for main worker
             if self.woo_api:
-                logger.info("[WOO-RESTORE] Testing WooCommerce connection...")
-                
-                def handle_woo_test_result(result):
-                    if result.get('success', False):
-                        logger.info("[WOO-RESTORE] SUCCESS WooCommerce connection successful")
-                        
-                        # Update connection state tracking
-                        self.woo_connected = True
-                        
-                        # Update unified connection status
-                        self.update_unified_connection_status(self.sf_connected, self.woo_connected, self.avalara_connected, self.quickbase_connected)
-                        
-                        # Load WooCommerce data sources
-                        logger.info("[WOO-RESTORE] Loading WooCommerce data sources...")
-                        self.load_woocommerce_data_sources()
-                        
-                        logger.info("[WOO-RESTORE] SUCCESS WooCommerce session restored")
-                    else:
-                        logger.warning(f"[WOO-RESTORE] Connection test failed: {result.get('error', 'Unknown error')}")
-                        self.woo_connected = False
-                        self._set_woo_disconnected_state()
-                
-                # Use AsyncAutoConnectWorker for proper async execution
-                self.auto_connect_worker = AsyncAutoConnectWorker(
-                    self.config,
-                    sf_api_instance=None,
-                    woo_api_instance=self.woo_api
-                )
-                
-                def handle_worker_result(results):
-                    if results.get('woo_connected'):
-                        handle_woo_test_result({'success': True})
-                    else:
-                        handle_woo_test_result({'success': False, 'error': 'Connection failed'})
-                
-                self.auto_connect_worker.connection_completed.connect(handle_worker_result)
-                self.auto_connect_worker.start()
-                return True  # Return immediately since async
+                logger.info("[WOO-RESTORE] WooCommerce API instance ready for connection testing")
+                logger.info("[WOO-RESTORE] Connection testing will be handled by main auto-connect worker")
+                return True  # API instance available, let main worker handle connection
             
         except Exception as e:
             logger.error(f"[WOO-RESTORE] ERROR WooCommerce session restoration failed: {e}")
@@ -1487,9 +1410,9 @@ class MainWindow(QMainWindow):
         woo_needs_refresh = True
         
         # Check Salesforce connection
-        if self.sf_api and hasattr(self.sf_api, 'auth_manager'):
-            if self.sf_api.auth_manager.is_token_valid():
-                logger.info("[REFRESH] Salesforce token still valid - no re-auth needed")
+        if self.sf_api and hasattr(self.sf_api, 'is_authenticated'):
+            if self.sf_api.is_authenticated():
+                logger.info("[REFRESH] Salesforce JWT still authenticated - no re-auth needed")
                 sf_needs_refresh = False
             else:
                 logger.info("[REFRESH] Salesforce token expired - will need re-auth")
@@ -1533,34 +1456,26 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(dialog)
         
         # Salesforce status
-        layout.addWidget(QLabel("<h3>Salesforce Status</h3>"))
-        
-        if self.sf_api and hasattr(self.sf_api, 'auth_manager'):
-            auth_manager = self.sf_api.auth_manager
-            
-            if auth_manager.access_token:
-                layout.addWidget(QLabel(f"✓ Access token: Present"))
-                
-                if auth_manager.token_expires_at:
-                    expires_dt = datetime.fromtimestamp(auth_manager.token_expires_at)
-                    current_dt = datetime.now()
-                    time_left = expires_dt - current_dt
-                    
-                    if auth_manager.is_token_valid():
-                        layout.addWidget(QLabel(f"✓ Token expires: {expires_dt.strftime('%Y-%m-%d %H:%M:%S')}"))
-                        layout.addWidget(QLabel(f"✓ Time remaining: {str(time_left).split('.')[0]}"))
-                    else:
-                        layout.addWidget(QLabel(f"⚠ Token expired: {expires_dt.strftime('%Y-%m-%d %H:%M:%S')}"))
-                        layout.addWidget(QLabel(f"⚠ Expired {str(abs(time_left)).split('.')[0]} ago"))
-                else:
-                    layout.addWidget(QLabel("⚠ No expiration info"))
-                    
-                if auth_manager.get_instance_url():
-                    layout.addWidget(QLabel(f"✓ Instance URL: {auth_manager.get_instance_url()}"))
+        layout.addWidget(QLabel("<h3>Salesforce JWT Status</h3>"))
+
+        if self.sf_api:
+            if hasattr(self.sf_api, 'has_credentials') and self.sf_api.has_credentials():
+                layout.addWidget(QLabel(f"✓ JWT credentials: Present"))
             else:
-                layout.addWidget(QLabel("✗ No access token"))
+                layout.addWidget(QLabel(f"✗ JWT credentials: Missing"))
+
+            if hasattr(self.sf_api, 'is_authenticated') and self.sf_api.is_authenticated():
+                layout.addWidget(QLabel(f"✓ Authentication: Authenticated"))
+
+                if hasattr(self.sf_api, 'access_token') and self.sf_api.access_token:
+                    layout.addWidget(QLabel(f"✓ Access token: Present"))
+
+                if hasattr(self.sf_api, 'instance_url') and self.sf_api.instance_url:
+                    layout.addWidget(QLabel(f"✓ Instance URL: {self.sf_api.instance_url}"))
+            else:
+                layout.addWidget(QLabel("✗ Not authenticated"))
         else:
-            layout.addWidget(QLabel("✗ No Salesforce API instance"))
+            layout.addWidget(QLabel("✗ No Salesforce JWT API instance"))
         
         # WooCommerce status
         layout.addWidget(QLabel("<h3>WooCommerce Status</h3>"))
@@ -1684,6 +1599,17 @@ class MainWindow(QMainWindow):
             self.data_worker.quit()
             self.data_worker.wait(3000)  # Wait up to 3 seconds
 
+        # Clean up test threads
+        if hasattr(self, 'avalara_test_thread') and self.avalara_test_thread and self.avalara_test_thread.isRunning():
+            logger.info("[MAIN-WINDOW] Stopping Avalara test thread...")
+            self.avalara_test_thread.quit()
+            self.avalara_test_thread.wait(3000)  # Wait up to 3 seconds
+
+        if hasattr(self, 'quickbase_test_thread') and self.quickbase_test_thread and self.quickbase_test_thread.isRunning():
+            logger.info("[MAIN-WINDOW] Stopping QuickBase test thread...")
+            self.quickbase_test_thread.quit()
+            self.quickbase_test_thread.wait(3000)  # Wait up to 3 seconds
+
         # Clean up any other manager workers
         if hasattr(self, 'data_source_manager') and self.data_source_manager:
             # Stop any active workers in data source manager
@@ -1693,6 +1619,6 @@ class MainWindow(QMainWindow):
                     worker.quit()
                     worker.wait(2000)  # Wait up to 2 seconds
 
-        logger.info("[MAIN-WINDOW] All workers cleaned up")
+        logger.info("[MAIN-WINDOW] All workers and test threads cleaned up")
 
         a0.accept()

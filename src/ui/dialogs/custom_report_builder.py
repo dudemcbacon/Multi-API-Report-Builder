@@ -16,7 +16,7 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QIcon
 import qtawesome as qta
 
-from src.services.async_salesforce_api import AsyncSalesforceAPI
+from src.services.async_jwt_salesforce_api import AsyncJWTSalesforceAPI
 from src.services.async_quickbase_api import AsyncQuickBaseAPI
 from src.ui.managers.metadata_cache_manager import MetadataCacheManager
 import os
@@ -104,7 +104,7 @@ class ObjectFieldsWorker(QThread):
     fields_loaded = pyqtSignal(str, dict)  # object_name, field_data
     error_occurred = pyqtSignal(str, str)  # object_name, error_message
     
-    def __init__(self, sf_api: AsyncSalesforceAPI, cache_manager: MetadataCacheManager, object_name: str):
+    def __init__(self, sf_api: AsyncJWTSalesforceAPI, cache_manager: MetadataCacheManager, object_name: str):
         super().__init__()
         self.sf_api = sf_api
         self.cache_manager = cache_manager
@@ -236,7 +236,7 @@ class CustomReportBuilderDialog(QDialog):
 
     report_ready = pyqtSignal(dict)  # Emitted when report is ready to run
 
-    def __init__(self, sf_api: AsyncSalesforceAPI = None, cache_manager: MetadataCacheManager = None, parent=None):
+    def __init__(self, sf_api: AsyncJWTSalesforceAPI = None, cache_manager: MetadataCacheManager = None, parent=None):
         super().__init__(parent)
         self.sf_api = sf_api
         self.cache_manager = cache_manager

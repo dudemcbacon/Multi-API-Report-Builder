@@ -42,9 +42,10 @@ class SalesforceSettingsWidget(QWidget):
         self.environment_combo.addItems(["Production", "Sandbox"])
         auth_layout.addRow("Environment:", self.environment_combo)
         
-        # Authentication method
+        # Authentication method (JWT Bearer Flow only)
         self.auth_method_combo = QComboBox()
-        self.auth_method_combo.addItems(["Browser OAuth (Recommended)", "Username/Password"])
+        self.auth_method_combo.addItems(["JWT Bearer Flow"])
+        self.auth_method_combo.setEnabled(False)  # Only one option available
         auth_layout.addRow("Auth Method:", self.auth_method_combo)
         
         # Custom instance URL
@@ -90,22 +91,21 @@ class SalesforceSettingsWidget(QWidget):
         instructions_layout = QVBoxLayout(instructions_group)
         
         instructions_text = QLabel("""
-        <b>To setup OAuth authentication in Salesforce:</b><br>
+        <b>To setup JWT Bearer Flow authentication in Salesforce:</b><br>
         1. Go to Setup → App Manager → New Connected App<br>
         2. Fill in basic information (Name, API Name, Contact Email)<br>
-        3. Enable OAuth Settings<br>
-        4. Add Callback URL: http://localhost:8080/callback<br>
+        3. Enable API (Enable OAuth Settings)<br>
+        4. Enable "Use Digital Signatures" and upload your certificate/public key<br>
         5. Select OAuth Scopes: "Full access (full)" or specific scopes needed<br>
-        6. For Username/Password flow: Enable "Enable OAuth settings for API Integration"<br>
-        7. Save and note the Consumer Key (already configured in this app)<br>
-        8. Optionally configure Consumer Secret for enhanced security<br>
-        9. In Manage Connected Apps, edit Policies:<br>
-        &nbsp;&nbsp;&nbsp;- Permitted Users: "Admin approved users are pre-authorized" (optional)<br>
-        &nbsp;&nbsp;&nbsp;- IP Relaxation: "Relaxed IP restrictions" (recommended)<br>
-        10. Assign the Connected App to user profiles/permission sets<br>
+        6. Save and note the Consumer Key (Client ID)<br>
+        7. In Manage Connected Apps, edit Policies:<br>
+        &nbsp;&nbsp;&nbsp;- Permitted Users: "Admin approved users are pre-authorized"<br>
+        &nbsp;&nbsp;&nbsp;- IP Relaxation: "Relax IP restrictions"<br>
+        8. Assign the Connected App to user profiles/permission sets<br>
+        9. Generate RSA key pair and configure SF_CLIENT_ID, SF_JWT_SUBJECT, SF_JWT_KEY_PATH<br>
         <br>
-        <b>Browser OAuth</b> - Opens an embedded browser within the app for secure login.<br>
-        <b>Username/Password</b> - Requires your username, password, and security token.
+        <b>JWT Bearer Flow</b> - Server-to-server authentication using RSA certificates.<br>
+        No browser interaction required - more secure for production environments.
         """)
         instructions_text.setWordWrap(True)
         instructions_layout.addWidget(instructions_text)

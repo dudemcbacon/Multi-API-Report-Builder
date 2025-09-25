@@ -8,7 +8,7 @@ from typing import Dict, Any
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from src.services.async_salesforce_api import AsyncSalesforceAPI
+from src.services.async_jwt_salesforce_api import AsyncJWTSalesforceAPI
 from src.services.async_woocommerce_api import AsyncWooCommerceAPI
 from src.services.async_avalara_api import AsyncAvalaraAPI
 from src.services.async_quickbase_api import AsyncQuickBaseAPI
@@ -144,7 +144,7 @@ class SalesforceConnectionWorker(QThread):
     report_metadata_loaded = pyqtSignal(dict, str)  # metadata, report_id
     error_occurred = pyqtSignal(str, str)  # operation, error_message
     
-    def __init__(self, operation: str, sf_api, **kwargs):
+    def __init__(self, operation: str, sf_api: AsyncJWTSalesforceAPI, **kwargs):
         super().__init__()
         self.operation = operation
         self.sf_api = sf_api
@@ -193,25 +193,11 @@ class SalesforceConnectionWorker(QThread):
         try:
             logger.info("[WORKER-TEST] Testing Salesforce connection...")
             
-            # Check if browser authentication is requested
-            auth_method = self.kwargs.get('auth_method')
-            if auth_method == "browser_oauth":
-                logger.info("[WORKER-TEST] Browser OAuth authentication requested")
-                # Use browser authentication
-                result = await self.sf_api.connect_with_browser()
-                if result:
-                    logger.info("[WORKER-TEST] Browser authentication successful")
-                    # Test the connection after authentication
-                    test_result = await self.sf_api.test_connection()
-                    self.connection_result.emit(test_result)
-                else:
-                    logger.error("[WORKER-TEST] Browser authentication failed")
-                    self.connection_result.emit({'success': False, 'error': 'Browser authentication failed'})
-            else:
-                # Regular connection test
-                result = await self.sf_api.test_connection()
-                logger.info(f"[WORKER-TEST] Connection test result: {result}")
-                self.connection_result.emit(result)
+            # JWT authentication doesn't require browser interaction
+            # Just test the connection directly (will authenticate automatically)
+            result = await self.sf_api.test_connection()
+            logger.info(f"[WORKER-TEST] JWT connection test result: {result}")
+            self.connection_result.emit(result)
         except Exception as e:
             logger.error(f"[WORKER-TEST] Connection test failed: {e}")
             self.error_occurred.emit("test_connection", str(e))
