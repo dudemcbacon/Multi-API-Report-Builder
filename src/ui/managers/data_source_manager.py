@@ -7,7 +7,8 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from datetime import datetime, timedelta
 
 # Import the worker classes
-from ..workers import BaseAsyncDataWorker, WooCommerceDataWorker, AvalaraDataWorker
+from ..workers import BaseAsyncDataWorker, WooCommerceDataWorker, AvalaraDataWorker, QuickBaseDataWorker
+
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class DataSourceManager(QObject):
         self.salesforce_reports_cache = []
         self.woocommerce_data_sources_cache = []
         self.avalara_data_sources_cache = []
+        self.quickbase_data_sources_cache = []
         
         # Active workers
         self.active_workers = {}
@@ -323,6 +325,12 @@ class DataSourceManager(QObject):
         logger.info(f"[DATA-MANAGER] Updating Avalara data sources cache with {len(data_sources)} sources")
         self.avalara_data_sources_cache = data_sources
         self.data_sources_loaded.emit('avalara', data_sources)
+
+    def update_quickbase_data_sources(self, data_sources: List[Dict[str, Any]]):
+        """Update QuickBase data sources cache"""
+        logger.info(f"[DATA-MANAGER] Updating QuickBase data sources cache with {len(data_sources)} sources")
+        self.quickbase_data_sources_cache = data_sources
+        self.data_sources_loaded.emit('quickbase', data_sources)
     
     def get_salesforce_reports(self) -> List[Dict[str, Any]]:
         """Get cached Salesforce reports"""
@@ -335,6 +343,10 @@ class DataSourceManager(QObject):
     def get_avalara_data_sources(self) -> List[Dict[str, Any]]:
         """Get cached Avalara data sources"""
         return self.avalara_data_sources_cache
+
+    def get_quickbase_data_sources(self) -> List[Dict[str, Any]]:
+        """Get cached QuickBase data sources"""
+        return self.quickbase_data_sources_cache
     
     def get_data_source_by_id(self, api_type: str, source_id: str) -> Optional[Dict[str, Any]]:
         """Get a specific data source by ID"""
@@ -342,6 +354,8 @@ class DataSourceManager(QObject):
             sources = self.woocommerce_data_sources_cache
         elif api_type == 'avalara':
             sources = self.avalara_data_sources_cache
+        elif api_type == 'quickbase':
+            sources = self.quickbase_data_sources_cache
         else:
             return None
         

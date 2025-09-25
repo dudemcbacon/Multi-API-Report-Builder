@@ -11,6 +11,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from src.services.async_salesforce_api import AsyncSalesforceAPI
 from src.services.async_woocommerce_api import AsyncWooCommerceAPI
 from src.services.async_avalara_api import AsyncAvalaraAPI
+from src.services.async_quickbase_api import AsyncQuickBaseAPI
 
 logger = logging.getLogger(__name__)
 
@@ -114,58 +115,25 @@ class QuickBaseDataWorker(BaseAsyncDataWorker):
         self.app_id = app_id
 
     async def _load_data_async(self):
-        """Async method to load QuickBase data"""
-
-        data_type = self.data_source.get('data_type', 'report')
-
+        """Async method to load QuickBase data - simplified using quickbase-client library"""
         async with AsyncQuickBaseAPI(
             realm_hostname=self.realm_hostname,
             user_token=self.user_token,
             app_id=self.app_id,
             verbose_logging=False
         ) as api:
-            if data_type == 'report':
-                # Load a specific report
-                table_id = self.data_source.get('table_id')
-                report_id = self.data_source.get('report_id')
-                if table_id and report_id:
-                    raw_data = await api.run_report(table_id, report_id)
-                    return api.to_dataframe(raw_data, "report")
-                else:
-                    logger.error("[QB-WORKER] Missing table_id or report_id for report")
-                    return None
+            # Get identifiers from data source
+            table_id = self.data_source.get('table_id')
+            report_id = self.data_source.get('report_id')
 
-            elif data_type == 'query':
-                # Execute a custom query
-                table_id = self.data_source.get('table_id')
-                query = self.data_source.get('query', {})
-                select = self.data_source.get('select', [])
-                if table_id:
-                    raw_data = await api.query_records(table_id, query=query, select=select)
-                    return api.to_dataframe(raw_data, "query")
-                else:
-                    logger.error("[QB-WORKER] Missing table_id for query")
-                    return None
+            logger.info(f"[QB-WORKER] Loading data: table_id={table_id}, report_id={report_id}")
 
-            elif data_type == 'apps':
-                # Get list of applications
-                apps = await api.get_apps()
-                import polars as pl
-                return pl.DataFrame(apps)
+            if not table_id:
+                logger.error("[QB-WORKER] No table_id provided")
+                return None
 
-            elif data_type == 'tables':
-                # Get tables for an app
-                app_id = self.data_source.get('app_id', self.app_id)
-                if app_id:
-                    tables = await api.get_tables(app_id)
-                    import polars as pl
-                    return pl.DataFrame(tables)
-                else:
-                    logger.error("[QB-WORKER] Missing app_id for tables")
-                    return None
-
-            else:
-                raise ValueError(f"Unknown QuickBase data type: {data_type}")
+            # Use the simplified get_report_data method
+            return await api.get_report_data(table_id, report_id)
 
 class SalesforceConnectionWorker(QThread):
     """Worker thread for Salesforce operations to avoid blocking UI"""
@@ -365,21 +333,178 @@ class SalesforceConnectionWorker(QThread):
             logger.error(f"[WORKER-METADATA] Error getting report metadata: {e}")
             self.error_occurred.emit("get_report_metadata", str(e))
 
+
+class QuickBaseConnectionWorker(QThread):
+    """Worker thread for QuickBase operations to avoid blocking UI"""
+
+    connection_result = pyqtSignal(dict)
+    apps_loaded = pyqtSignal(list)
+    tables_loaded = pyqtSignal(list, str)  # tables, app_id
+    reports_loaded = pyqtSignal(list, str)  # reports, table_id
+    report_data_loaded = pyqtSignal(object, str)  # DataFrame, source_name
+    error_occurred = pyqtSignal(str, str)  # operation, error_message
+
+    def __init__(self, operation: str, api_instance=None, **kwargs):
+        """
+        Initialize QuickBase worker
+
+        Args:
+            operation: Operation to perform ('test_connection', 'list_apps', 'list_tables', 'list_reports', 'get_report_data')
+            api_instance: AsyncQuickBaseAPI instance
+            **kwargs: Additional parameters for specific operations
+        """
+        super().__init__()
+        self.operation = operation
+        self.api = api_instance
+        self.kwargs = kwargs
+        self.loop = None
+
+    def run(self):
+        """Run the requested operation"""
+        try:
+            # Create new event loop for this thread
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
+
+            logger.info(f"[QB-WORKER] Starting operation: {self.operation}")
+
+            if self.operation == "test_connection":
+                self.test_connection()
+            elif self.operation == "list_apps":
+                self.list_apps()
+            elif self.operation == "list_tables":
+                self.list_tables()
+            elif self.operation == "list_reports":
+                self.list_reports()
+            elif self.operation == "get_report_data":
+                self.get_report_data()
+            else:
+                logger.error(f"[QB-WORKER] Unknown operation: {self.operation}")
+                self.error_occurred.emit(self.operation, f"Unknown operation: {self.operation}")
+
+        except Exception as e:
+            logger.error(f"[QB-WORKER] Error in {self.operation}: {e}")
+            self.error_occurred.emit(self.operation, str(e))
+        finally:
+            # Clean up event loop
+            if self.loop:
+                self.loop.close()
+
+    def test_connection(self):
+        """Test QuickBase API connection"""
+        try:
+            logger.info("[QB-WORKER] Testing QuickBase connection")
+
+            # Run async operation
+            result = self.loop.run_until_complete(self.api.test_connection())
+
+            logger.info(f"[QB-WORKER] Connection test result: {result.get('success', False)}")
+            self.connection_result.emit(result)
+
+        except Exception as e:
+            logger.error(f"[QB-WORKER] Connection test error: {e}")
+            self.error_occurred.emit("test_connection", str(e))
+
+    def list_apps(self):
+        """List available QuickBase applications"""
+        try:
+            logger.info("[QB-WORKER] Listing QuickBase apps")
+
+            # Run async operation
+            apps = self.loop.run_until_complete(self.api.get_apps())
+
+            logger.info(f"[QB-WORKER] Retrieved {len(apps)} apps")
+            self.apps_loaded.emit(apps)
+
+        except Exception as e:
+            logger.error(f"[QB-WORKER] Error listing apps: {e}")
+            self.error_occurred.emit("list_apps", str(e))
+
+    def list_tables(self):
+        """List tables for a QuickBase application"""
+        try:
+            app_id = self.kwargs.get('app_id')
+            if not app_id:
+                raise ValueError("app_id is required for listing tables")
+
+            logger.info(f"[QB-WORKER] Listing tables for app: {app_id}")
+
+            # Run async operation
+            tables = self.loop.run_until_complete(self.api.get_tables(app_id))
+
+            logger.info(f"[QB-WORKER] Retrieved {len(tables)} tables")
+            self.tables_loaded.emit(tables, app_id)
+
+        except Exception as e:
+            logger.error(f"[QB-WORKER] Error listing tables: {e}")
+            self.error_occurred.emit("list_tables", str(e))
+
+    def list_reports(self):
+        """List reports for a QuickBase table"""
+        try:
+            table_id = self.kwargs.get('table_id')
+            if not table_id:
+                raise ValueError("table_id is required for listing reports")
+
+            logger.info(f"[QB-WORKER] Listing reports for table: {table_id}")
+
+            # Run async operation
+            reports = self.loop.run_until_complete(self.api.get_reports(table_id))
+
+            logger.info(f"[QB-WORKER] Retrieved {len(reports)} reports")
+            self.reports_loaded.emit(reports, table_id)
+
+        except Exception as e:
+            logger.error(f"[QB-WORKER] Error listing reports: {e}")
+            self.error_occurred.emit("list_reports", str(e))
+
+    def get_report_data(self):
+        """Get data from a QuickBase report or table"""
+        try:
+            table_id = self.kwargs.get('table_id')
+            report_id = self.kwargs.get('report_id')
+            source_name = self.kwargs.get('source_name', 'QuickBase Report')
+            query = self.kwargs.get('query')
+            limit = self.kwargs.get('limit')
+
+            if not table_id:
+                raise ValueError("table_id is required for getting report data")
+
+            logger.info(f"[QB-WORKER] Getting data from table: {table_id}, report: {report_id}")
+
+            # Run async operation
+            df = self.loop.run_until_complete(
+                self.api.get_report_data(table_id, report_id, query, limit)
+            )
+
+            if df is not None and not df.is_empty():
+                logger.info(f"[QB-WORKER] Retrieved {len(df)} rows")
+                self.report_data_loaded.emit(df, source_name)
+            else:
+                logger.warning("[QB-WORKER] No data retrieved")
+                self.error_occurred.emit("get_report_data", "No data retrieved from QuickBase")
+
+        except Exception as e:
+            logger.error(f"[QB-WORKER] Error getting report data: {e}")
+            self.error_occurred.emit("get_report_data", str(e))
+
+
 class AsyncAutoConnectWorker(QThread):
     """Async worker for auto-connecting to APIs with optimizations"""
     
     # Signals for connection results
     connection_progress = pyqtSignal(str)  # Progress message
-    connection_completed = pyqtSignal(dict)  # Results: {'sf_connected': bool, 'woo_connected': bool, 'avalara_connected': bool, 'qb_connected': bool}
+    connection_completed = pyqtSignal(dict)  # Results: {'sf_connected': bool, 'woo_connected': bool, 'avalara_connected': bool, 'quickbase_connected': bool}
     error_occurred = pyqtSignal(str, str)  # api_type, error_message
     data_sources_loaded = pyqtSignal(str, list)  # api_type, data_sources
+    quickbase_table_reports_loaded = pyqtSignal(str, list)  # table_id, reports
     
     def __init__(self, config, sf_api_instance=None, woo_api_instance=None):
         super().__init__()
         self.config = config
         self.sf_api_instance = sf_api_instance
         self.woo_api_instance = woo_api_instance
-        self.results = {'sf_connected': False, 'woo_connected': False, 'avalara_connected': False}
+        self.results = {'sf_connected': False, 'woo_connected': False, 'avalara_connected': False, 'quickbase_connected': False}
         
     def run(self):
         """Run async auto-connect operations"""
@@ -410,6 +535,9 @@ class AsyncAutoConnectWorker(QThread):
 
         # Test Avalara connection
         await self._test_avalara_connection()
+
+        # Test QuickBase connection
+        await self._test_quickbase_connection()
 
         # Emit completion signal
         self.connection_completed.emit(self.results)
@@ -523,4 +651,54 @@ class AsyncAutoConnectWorker(QThread):
             logger.error(f"[ASYNC-AUTO-CONNECT] Avalara connection error: {e}")
             self.results['avalara_connected'] = False
             self.error_occurred.emit("avalara", str(e))
+
+    async def _test_quickbase_connection(self):
+        """Test QuickBase connection and load data sources if successful"""
+        try:
+            self.connection_progress.emit("Testing QuickBase connection...")
+
+            # Always create a fresh API instance to avoid event loop issues
+            from src.services.async_quickbase_api import AsyncQuickBaseAPI
+            async with AsyncQuickBaseAPI(verbose_logging=False) as qb_api:
+                result = await qb_api.test_connection()
+
+                if result.get('success'):
+                    self.results['quickbase_connected'] = True
+                    logger.info("[ASYNC-AUTO-CONNECT] QuickBase connection successful")
+
+                    # Load data sources if connection successful
+                    self.connection_progress.emit("Loading QuickBase data sources...")
+                    try:
+                        # Get actual tables using async method
+                        tables = await qb_api.get_apps()  # This now returns actual tables
+                        logger.info(f"[ASYNC-AUTO-CONNECT] Loaded {len(tables)} QuickBase data sources")
+                        self.data_sources_loaded.emit("quickbase", tables)
+
+                        # Also load reports for the first few tables to populate tree
+                        if len(tables) > 0:
+                            self.connection_progress.emit("Loading QuickBase reports...")
+                            for i, table in enumerate(tables[:3]):  # Load reports for first 3 tables
+                                try:
+                                    table_id = table.get('table_id', table.get('id'))
+                                    if table_id:
+                                        reports = await qb_api.get_reports(table_id)
+                                        logger.info(f"[ASYNC-AUTO-CONNECT] Loaded {len(reports)} reports for table {table['name']}")
+                                        # Emit signal for each table's reports
+                                        self.quickbase_table_reports_loaded.emit(table_id, reports)
+                                except Exception as e:
+                                    logger.warning(f"[ASYNC-AUTO-CONNECT] Failed to load reports for table {table.get('name', 'Unknown')}: {e}")
+
+                    except Exception as e:
+                        logger.warning(f"[ASYNC-AUTO-CONNECT] Failed to load QuickBase data sources: {e}")
+                        self.data_sources_loaded.emit("quickbase", [])
+                else:
+                    error_msg = result.get('message', result.get('error', 'Unknown error'))
+                    logger.warning(f"[ASYNC-AUTO-CONNECT] QuickBase connection failed: {error_msg}")
+                    self.results['quickbase_connected'] = False
+                    self.error_occurred.emit("quickbase", error_msg)
+
+        except Exception as e:
+            logger.error(f"[ASYNC-AUTO-CONNECT] QuickBase connection error: {e}")
+            self.results['quickbase_connected'] = False
+            self.error_occurred.emit("quickbase", str(e))
 

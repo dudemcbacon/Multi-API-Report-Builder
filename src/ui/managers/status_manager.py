@@ -38,7 +38,7 @@ class StatusManager(QObject):
     
     def _initialize_status(self):
         """Initialize status elements to default state"""
-        self.update_connection_status({'salesforce': False, 'woocommerce': False, 'avalara': False})
+        self.update_connection_status({'salesforce': False, 'woocommerce': False, 'avalara': False, 'quickbase': False})
         self.update_status_message("Ready")
         self.hide_progress()
     
@@ -56,18 +56,19 @@ class StatusManager(QObject):
             sf_connected = connection_status.get('salesforce', False)
             woo_connected = connection_status.get('woocommerce', False)
             avalara_connected = connection_status.get('avalara', False)
+            quickbase_connected = connection_status.get('quickbase', False)
 
-            connected_count = sum([sf_connected, woo_connected, avalara_connected])
+            connected_count = sum([sf_connected, woo_connected, avalara_connected, quickbase_connected])
 
             # Generate status text and styling
-            if connected_count == 3:
+            if connected_count == 4:
                 status_text = "All Connected"
                 style = "color: green; font-weight: bold;"
                 status_message = "All APIs connected successfully"
             elif connected_count > 0:
-                status_text = f"{connected_count}/3 Connected"
+                status_text = f"{connected_count}/4 Connected"
                 style = "color: orange; font-weight: bold;"
-                status_message = f"{connected_count} of 3 APIs connected"
+                status_message = f"{connected_count} of 4 APIs connected"
             else:
                 status_text = "Not Connected"
                 style = "color: red; font-weight: bold;"
@@ -87,8 +88,8 @@ class StatusManager(QObject):
             
             # Emit signal
             self.connection_status_updated.emit(status_text, style)
-            
-            logger.info(f"[STATUS-MANAGER] Connection status updated: {status_text} ({connected_count}/3)")
+
+            logger.info(f"[STATUS-MANAGER] Connection status updated: {status_text} ({connected_count}/4)")
             
         except Exception as e:
             logger.error(f"[STATUS-MANAGER] Error updating connection status: {e}")
@@ -191,10 +192,10 @@ class StatusManager(QObject):
             # Restore connection status message
             if self.current_connection_status:
                 connected_count = sum(self.current_connection_status.values())
-                if connected_count == 3:
+                if connected_count == 4:
                     message = "All APIs connected successfully"
                 elif connected_count > 0:
-                    message = f"{connected_count} of 3 APIs connected"
+                    message = f"{connected_count} of 4 APIs connected"
                 else:
                     message = "Ready"
                 
@@ -266,11 +267,12 @@ class StatusManager(QObject):
         
         return {
             'connected_count': connected_count,
-            'total_count': 3,
+            'total_count': 4,
             'salesforce': self.current_connection_status.get('salesforce', False),
             'woocommerce': self.current_connection_status.get('woocommerce', False),
             'avalara': self.current_connection_status.get('avalara', False),
-            'all_connected': connected_count == 3,
+            'quickbase': self.current_connection_status.get('quickbase', False),
+            'all_connected': connected_count == 4,
             'none_connected': connected_count == 0,
             'current_message': self.current_message,
             'is_loading': self.is_loading
@@ -290,7 +292,7 @@ class StatusManager(QObject):
         """Reset all status elements to default state"""
         logger.info("[STATUS-MANAGER] Resetting status to default")
         
-        self.current_connection_status = {'salesforce': False, 'woocommerce': False, 'avalara': False}
+        self.current_connection_status = {'salesforce': False, 'woocommerce': False, 'avalara': False, 'quickbase': False}
         self.current_message = ""
         self.is_loading = False
         
@@ -300,6 +302,6 @@ class StatusManager(QObject):
         """Set all status elements to disconnected state"""
         logger.info("[STATUS-MANAGER] Setting disconnected state")
         
-        self.update_connection_status({'salesforce': False, 'woocommerce': False, 'avalara': False})
+        self.update_connection_status({'salesforce': False, 'woocommerce': False, 'avalara': False, 'quickbase': False})
         self.update_status_message("Disconnected")
         self.hide_progress()

@@ -19,7 +19,17 @@
       "Read(/~/.config/SalesforceReportPull/**)",
       "Bash(taskkill:*)",
       "Bash(tasklist)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(git commit:*)",
+      "Bash(gh repo create:*)",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(if exist .venv rmdir /s /q .venv)",
+      "Bash(powershell:*)",
+      "WebFetch(domain:helpv2.quickbase.com)",
+      "WebFetch(domain:help.quickbase.com)",
+      "WebFetch(domain:quickbase-client.readthedocs.io)"
     ],
     "deny": []
   }

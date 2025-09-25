@@ -21,6 +21,7 @@ from src.models.config import ConfigManager, SalesforceConfig
 from src.services.async_salesforce_api import AsyncSalesforceAPI
 from src.services.async_woocommerce_api import AsyncWooCommerceAPI
 from src.services.async_avalara_api import AsyncAvalaraAPI
+from src.services.async_quickbase_api import AsyncQuickBaseAPI
 from src.ui.settings_dialog import SettingsDialog
 from src.ui.data_grid import InteractiveDataGrid
 from src.ui.tabs.source_data_tab import SourceDataTab
@@ -50,6 +51,7 @@ class MainWindow(QMainWindow):
         self.sf_api: Optional[AsyncSalesforceAPI] = None
         self.woo_api: Optional[AsyncWooCommerceAPI] = None
         self.avalara_api: Optional[AsyncAvalaraAPI] = None
+        self.quickbase_api: Optional[AsyncQuickBaseAPI] = None
         self.connection_worker: Optional[SalesforceConnectionWorker] = None
         self.reports_worker: Optional[SalesforceConnectionWorker] = None
         self.data_worker: Optional[SalesforceConnectionWorker] = None
@@ -62,11 +64,13 @@ class MainWindow(QMainWindow):
         self.async_sf_reports = []
         self.async_woo_data_sources = []
         self.async_avalara_data_sources = []
+        self.async_quickbase_data_sources = []
         
         # Connection state tracking
         self.sf_connected = False
         self.woo_connected = False
         self.avalara_connected = False
+        self.quickbase_connected = False
         
         
         # Setup UI
@@ -96,6 +100,7 @@ class MainWindow(QMainWindow):
         self.sf_api = self.connection_manager.get_api_instance('salesforce')
         self.woo_api = self.connection_manager.get_api_instance('woocommerce')
         self.avalara_api = self.connection_manager.get_api_instance('avalara')
+        self.quickbase_api = self.connection_manager.get_api_instance('quickbase')
         
         # Initialize Tree Population Manager
         self.tree_manager = TreePopulationManager(self.source_data_tab.data_tree)
@@ -111,9 +116,9 @@ class MainWindow(QMainWindow):
             self.progress_bar
         )
         
-        # Connect manager signals
-        self.connection_manager.connection_status_changed.connect(self.status_manager.update_connection_status)
-        self.connection_manager.connection_status_changed.connect(self.tree_manager.populate_unified_tree)
+        # Connect manager signals - use adapter methods to handle signal format conversion
+        self.connection_manager.connection_status_changed.connect(self.on_individual_connection_status_changed)
+        # Note: tree_manager will be updated via the adapter method
         self.data_manager.data_loaded.connect(self.on_report_data_loaded)
         self.data_manager.data_loading_error.connect(self.on_data_loading_error)
         
@@ -169,6 +174,8 @@ class MainWindow(QMainWindow):
             self.load_woocommerce_data_source(data_source)
         elif api_type == "avalara":
             self.load_avalara_data_source(data_source)
+        elif api_type == "quickbase":
+            self.load_quickbase_data_source(data_source)
         else:
             logger.error(f"Unknown API type: {api_type}")
             QMessageBox.warning(self, "Unknown API", f"Unknown API type: {api_type}")
@@ -335,7 +342,40 @@ class MainWindow(QMainWindow):
             self.status_manager.hide_progress()
             self.status_manager.show_error(f"Error loading {data_source['name']}: {str(e)}")
             QMessageBox.critical(self, "Loading Error", f"Error loading {data_source['name']}:\n{str(e)}")
-    
+
+    def load_quickbase_data_source(self, data_source):
+        """Load QuickBase data source"""
+        logger.info(f"[UI-LOAD-QB] Loading QuickBase data source: {data_source['name']}")
+
+        # Check if we have an API connection
+        if not self.quickbase_api:
+            logger.error("[UI-LOAD-QB] No QuickBase API connection")
+            QMessageBox.warning(self, "No Connection",
+                              "Please connect to QuickBase first.\n\n" +
+                              "Make sure you have set your QuickBase credentials in the .env file:\n" +
+                              "QUICKBASE_USER_TOKEN=your_user_token\n" +
+                              "QUICKBASE_APP_ID=your_app_id")
+            return
+
+        # Show progress using status manager
+        self.status_manager.show_progress(f"Loading QuickBase data: {data_source['name']}...")
+
+        try:
+            # Get date range if provided
+            start_date = data_source.get('start_date')
+            end_date = data_source.get('end_date')
+
+            # Use data manager to load data
+            self.data_manager.load_data_source(data_source, start_date, end_date)
+            logger.info("[UI-LOAD-QB] Data loading delegated to data manager")
+
+        except Exception as e:
+            logger.error(f"[UI-LOAD-QB] ERROR loading QuickBase data: {e}")
+            logger.error("[UI-LOAD-QB] Stack trace:", exc_info=True)
+            self.status_manager.hide_progress()
+            self.status_manager.show_error(f"Error loading {data_source['name']}: {str(e)}")
+            QMessageBox.critical(self, "Loading Error", f"Error loading {data_source['name']}:\n{str(e)}")
+
     def setup_menus(self):
         """Setup application menus"""
         menubar = self.menuBar()
@@ -458,7 +498,7 @@ class MainWindow(QMainWindow):
         logger.info("[ASYNC-AUTO-CONNECT] Starting optimized auto-connection to all APIs")
         
         # Update status to show connection in progress
-        self.update_unified_connection_status(False, False, False)
+        self.update_unified_connection_status(False, False, False, False)
         self.source_data_tab.update_connection_status("Connecting...", "orange")
         
         # Show progress bar
@@ -469,6 +509,7 @@ class MainWindow(QMainWindow):
         self.restore_salesforce_session()
         self.restore_woocommerce_session()
         self.initialize_avalara_api()
+        self.initialize_quickbase_api()
         
         # Log token status for transparency
         if self.sf_api and hasattr(self.sf_api, 'auth_manager'):
@@ -490,6 +531,7 @@ class MainWindow(QMainWindow):
         self.auto_connect_worker.error_occurred.connect(self.on_auto_connect_error)
         self.auto_connect_worker.finished.connect(self.on_auto_connect_finished)
         self.auto_connect_worker.data_sources_loaded.connect(self.on_async_reports_loaded)
+        self.auto_connect_worker.quickbase_table_reports_loaded.connect(self.on_quickbase_table_reports_loaded)
         
         # Start the worker
         self.auto_connect_worker.start()
@@ -529,7 +571,7 @@ class MainWindow(QMainWindow):
         logger.info(f"[ASYNC-AUTO-CONNECT] Completed: SF={sf_connected}, WC={woo_connected}, Avalara={self.avalara_connected}")
         
         # Update connection status using actual state tracking
-        self.update_unified_connection_status(self.sf_connected, self.woo_connected, self.avalara_connected)
+        self.update_unified_connection_status(self.sf_connected, self.woo_connected, self.avalara_connected, self.quickbase_connected)
         
         # Populate the unified tree with async-loaded data
         self.populate_unified_tree_async()
@@ -558,7 +600,19 @@ class MainWindow(QMainWindow):
         elif api_type == "avalara":
             self.async_avalara_data_sources = reports
             logger.info(f"[ASYNC-AUTO-CONNECT] Cached {len(reports)} Avalara data sources")
-    
+        elif api_type == "quickbase":
+            self.async_quickbase_data_sources = reports
+            logger.info(f"[ASYNC-AUTO-CONNECT] Cached {len(reports)} QuickBase data sources")
+
+    def on_quickbase_table_reports_loaded(self, table_id: str, reports: list):
+        """Handle QuickBase table reports loaded by async worker"""
+        logger.info(f"[ASYNC-AUTO-CONNECT] Loaded {len(reports)} reports for QuickBase table {table_id}")
+        # Update tree manager with reports for this table
+        self.tree_manager.update_quickbase_table_reports(table_id, reports)
+
+        # Note: Tree repopulation is handled by populate_unified_tree_async() to avoid multiple updates
+        # Individual table report loading does not trigger immediate tree refresh
+
     def on_auto_connect_error(self, api_type: str, error_message: str):
         """Handle async auto-connect errors"""
         logger.error(f"[ASYNC-AUTO-CONNECT] {api_type} error: {error_message}")
@@ -572,13 +626,42 @@ class MainWindow(QMainWindow):
     
     # Removed show_salesforce_connect_dialog - auto-connect handles all authentication automatically
     
-    def update_unified_connection_status(self, sf_connected: bool, woo_connected: bool, avalara_connected: bool = False):
+    def on_individual_connection_status_changed(self, api_type: str, connected: bool):
+        """
+        Adapter method to handle individual API connection status changes from ConnectionManager
+        Converts (str, bool) signal to Dict[str, bool] format expected by StatusManager
+
+        Note: Tree population is handled separately via populate_unified_tree_async() to avoid multiple updates
+        """
+        try:
+            # Get current connection states from connection manager
+            current_status = {
+                'salesforce': getattr(self.connection_manager, 'sf_connected', False),
+                'woocommerce': getattr(self.connection_manager, 'woo_connected', False),
+                'avalara': getattr(self.connection_manager, 'avalara_connected', False),
+                'quickbase': getattr(self.connection_manager, 'quickbase_connected', False),
+            }
+
+            # Update the changed API status
+            if api_type in current_status:
+                current_status[api_type] = connected
+
+            # Update status manager only - tree will be updated once when data is ready
+            self.status_manager.update_connection_status(current_status)
+
+            logger.info(f"[MAIN-WINDOW] Connection status updated: {api_type}={connected}, Full status: {current_status}")
+
+        except Exception as e:
+            logger.error(f"[MAIN-WINDOW] Error handling connection status change: {e}")
+
+    def update_unified_connection_status(self, sf_connected: bool, woo_connected: bool, avalara_connected: bool = False, quickbase_connected: bool = False):
         """Update the connection status display for all APIs with token info"""
         # Use status manager to handle status updates
         connection_status = {
             'salesforce': sf_connected,
             'woocommerce': woo_connected,
             'avalara': avalara_connected,
+            'quickbase': quickbase_connected,
         }
         
         # Update status using manager
@@ -592,6 +675,7 @@ class MainWindow(QMainWindow):
         sf_status = "✓" if sf_connected else "✗"
         woo_status = "✓" if woo_connected else "✗"
         avalara_status = "✓" if avalara_connected else "✗"
+        quickbase_status = "✓" if quickbase_connected else "✗"
         
         # Add token status for Salesforce
         sf_token_info = ""
@@ -602,12 +686,12 @@ class MainWindow(QMainWindow):
                 sf_token_info = " (token expired)"
                 sf_status = "⚠"  # Warning symbol for expired token
         
-        status_text = f"SF: {sf_status}{sf_token_info}  WC: {woo_status}  AV: {avalara_status}"
-        
+        status_text = f"SF: {sf_status}{sf_token_info}  WC: {woo_status}  AV: {avalara_status}  QB: {quickbase_status}"
+
         # Count connected APIs for color determination
-        connected_count = sum([sf_connected, woo_connected, avalara_connected])
-        
-        if connected_count == 3:
+        connected_count = sum([sf_connected, woo_connected, avalara_connected, quickbase_connected])
+
+        if connected_count == 4:
             # Check if Salesforce token is actually valid
             if self.sf_api and hasattr(self.sf_api, 'auth_manager') and not self.sf_api.auth_manager.is_token_valid():
                 color = "orange"
@@ -630,34 +714,36 @@ class MainWindow(QMainWindow):
         """Set UI to Salesforce disconnected state"""
         logger.info("[SESSION-RESTORE] Setting UI to disconnected state")
         self.sf_connected = False
-        self.update_unified_connection_status(self.sf_connected, self.woo_connected, self.avalara_connected)
+        self.update_unified_connection_status(self.sf_connected, self.woo_connected, self.avalara_connected, self.quickbase_connected)
     
     def _set_woo_disconnected_state(self):
         """Set UI to WooCommerce disconnected state"""
         logger.info("[WOO-RESTORE] Setting UI to disconnected state")
         self.woo_connected = False
-        self.update_unified_connection_status(self.sf_connected, self.woo_connected, self.avalara_connected)
+        self.update_unified_connection_status(self.sf_connected, self.woo_connected, self.avalara_connected, self.quickbase_connected)
         self.status_bar.showMessage("WooCommerce not configured")
     
     def populate_unified_tree_async(self):
         """Populate the unified tree with async-loaded data (optimized)"""
         logger.info("[UNIFIED-TREE-ASYNC] Populating unified tree with async-loaded data")
-        
+
         # Update tree manager with current data
         self.tree_manager.update_salesforce_data(self.async_sf_reports)
         self.tree_manager.update_woocommerce_data(self.async_woo_data_sources)
         self.tree_manager.update_avalara_data(self.async_avalara_data_sources)
-        
+        self.tree_manager.update_quickbase_data(self.async_quickbase_data_sources)
+
         # Get current connection status
         connection_status = {
             'salesforce': self.sf_connected,
             'woocommerce': self.woo_connected,
             'avalara': self.avalara_connected,
+            'quickbase': self.quickbase_connected,
         }
-        
+
         # Use tree manager to populate tree
         self.tree_manager.populate_unified_tree(connection_status)
-        
+
         logger.info("[UNIFIED-TREE-ASYNC] Unified tree populated successfully with async data")
     
     
@@ -709,7 +795,7 @@ class MainWindow(QMainWindow):
                                 self.source_data_tab.clear_metadata_cache()
                             
                             # Update unified connection status
-                            self.update_unified_connection_status(self.sf_connected, self.woo_connected, self.avalara_connected)
+                            self.update_unified_connection_status(self.sf_connected, self.woo_connected, self.avalara_connected, self.quickbase_connected)
                             
                             # Enable the load reports button and automatically load reports
                             logger.info("[SESSION-RESTORE] Auto-loading reports from restored session...")
@@ -785,7 +871,7 @@ class MainWindow(QMainWindow):
                         self.woo_connected = True
                         
                         # Update unified connection status
-                        self.update_unified_connection_status(self.sf_connected, self.woo_connected, self.avalara_connected)
+                        self.update_unified_connection_status(self.sf_connected, self.woo_connected, self.avalara_connected, self.quickbase_connected)
                         
                         # Load WooCommerce data sources
                         logger.info("[WOO-RESTORE] Loading WooCommerce data sources...")
@@ -863,7 +949,7 @@ class MainWindow(QMainWindow):
                         logger.info(f"[AVALARA-INIT] Connected to {account_info} ({environment})")
                         
                         # Update unified connection status instead of individual UI elements
-                        self.update_unified_connection_status(self.sf_connected, self.woo_connected, self.avalara_connected)
+                        self.update_unified_connection_status(self.sf_connected, self.woo_connected, self.avalara_connected, self.quickbase_connected)
                         
                         # Connection successful - data sources are already initialized
                         logger.info("[AVALARA-INIT] SUCCESS Avalara session initialized")
@@ -934,8 +1020,114 @@ class MainWindow(QMainWindow):
         self.async_avalara_data_sources = []
         
         # Update unified connection status instead of individual UI elements
-        self.update_unified_connection_status(self.sf_connected, self.woo_connected, self.avalara_connected)
-    
+        self.update_unified_connection_status(self.sf_connected, self.woo_connected, self.avalara_connected, self.quickbase_connected)
+
+    def initialize_quickbase_api(self):
+        """Initialize or restore QuickBase API session"""
+        logger.info("[QUICKBASE-INIT] " + "=" * 50)
+        logger.info("[QUICKBASE-INIT] Initializing QuickBase API")
+        logger.info("[QUICKBASE-INIT] " + "=" * 50)
+
+        try:
+            # Use ConnectionManager's API instance instead of creating new ones
+            if not self.quickbase_api:
+                self.quickbase_api = self.connection_manager.get_api_instance('quickbase')
+                logger.info("[QUICKBASE-INIT] Using ConnectionManager's QuickBase API instance")
+
+            # Test the connection
+            if self.quickbase_api:
+                logger.info("[QUICKBASE-INIT] Testing QuickBase connection...")
+
+                def handle_quickbase_test_result(result):
+                    logger.info(f"[QUICKBASE-CALLBACK] Callback called with result: {result}")
+                    if result.get('success', False):
+                        logger.info("[QUICKBASE-INIT] SUCCESS QuickBase connection successful")
+
+                        # Update connection state tracking
+                        self.quickbase_connected = True
+
+                        # Update UI to show connected state
+                        details = result.get('details', {})
+                        realm = details.get('realm', 'Unknown')
+                        apps_found = details.get('apps_found', 0)
+
+                        logger.info(f"[QUICKBASE-INIT] Connected to {realm} ({apps_found} apps found)")
+
+                        # Update unified connection status
+                        self.update_unified_connection_status(
+                            self.sf_connected, self.woo_connected, self.avalara_connected, self.quickbase_connected
+                        )
+
+                        # Connection successful
+                        logger.info("[QUICKBASE-INIT] SUCCESS QuickBase session initialized")
+                    else:
+                        error_msg = result.get('message', result.get('error', 'Unknown error'))
+                        logger.warning(f"[QUICKBASE-INIT] Connection test failed: {error_msg}")
+
+                        # Check if it's an authentication error
+                        if 'Authentication failed' in error_msg or result.get('status') == 401:
+                            logger.error("[QUICKBASE-INIT] Authentication failed - check credentials in .env file")
+                            logger.error("[QUICKBASE-INIT] Please set QUICKBASE_REALM_HOSTNAME and QUICKBASE_USER_TOKEN")
+
+                        self._set_quickbase_disconnected_state()
+
+                # Create a test thread to avoid blocking the UI
+                class QuickBaseTestThread(QThread):
+                    def __init__(self, connection_manager):
+                        super().__init__()
+                        self.connection_manager = connection_manager
+                        self.result = None
+
+                    def run(self):
+                        import asyncio
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            self.result = loop.run_until_complete(
+                                self.connection_manager.test_connection('quickbase')
+                            )
+                        except Exception as e:
+                            self.result = {'success': False, 'error': str(e)}
+                        finally:
+                            loop.close()
+
+                # Use QThread instead of raw threading.Thread for proper PyQt integration
+                self.quickbase_test_thread = QuickBaseTestThread(self.connection_manager)
+                self.quickbase_test_thread.finished.connect(
+                    lambda: QTimer.singleShot(0, lambda: handle_quickbase_test_result(self.quickbase_test_thread.result))
+                )
+                self.quickbase_test_thread.start()
+                return True  # Return immediately since async
+
+        except Exception as e:
+            logger.error(f"[QUICKBASE-INIT] ERROR QuickBase initialization failed: {e}")
+            logger.error(f"[QUICKBASE-INIT] Exception type: {type(e).__name__}")
+            logger.error("[QUICKBASE-INIT] Stack trace:", exc_info=True)
+
+        # If we get here, initialization failed - show disconnected state
+        logger.info("[QUICKBASE-INIT] Setting UI to disconnected state")
+        self._set_quickbase_disconnected_state()
+
+        logger.info("[QUICKBASE-INIT] " + "=" * 50)
+        logger.info("[QUICKBASE-INIT] QuickBase initialization completed")
+        logger.info("[QUICKBASE-INIT] " + "=" * 50)
+        return False
+
+    def _set_quickbase_disconnected_state(self):
+        """Set UI to show QuickBase disconnected state"""
+        logger.info("[QUICKBASE-INIT] Setting QuickBase disconnected state")
+
+        # Update connection state tracking
+        self.quickbase_connected = False
+
+        # Clear the data sources when disconnected
+        self.async_quickbase_data_sources = []
+
+        # Update unified connection status
+        self.update_unified_connection_status(
+            self.sf_connected, self.woo_connected, self.avalara_connected, self.quickbase_connected
+        )
+
     def show_woocommerce_config_dialog(self):
         """Show WooCommerce configuration dialog"""
         from PyQt6.QtWidgets import QDialog, QVBoxLayout, QFormLayout, QLineEdit, QDialogButtonBox, QLabel

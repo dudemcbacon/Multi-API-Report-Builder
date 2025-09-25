@@ -9,6 +9,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from src.services.async_salesforce_api import AsyncSalesforceAPI
 from src.services.async_woocommerce_api import AsyncWooCommerceAPI
 from src.services.async_avalara_api import AsyncAvalaraAPI
+from src.services.async_quickbase_api import AsyncQuickBaseAPI
 from src.services.auth_manager import SalesforceAuthManager
 from src.models.config import ConfigManager
 
@@ -32,11 +33,13 @@ class ConnectionManager(QObject):
         self.sf_api: Optional[AsyncSalesforceAPI] = None
         self.woo_api: Optional[AsyncWooCommerceAPI] = None
         self.avalara_api: Optional[AsyncAvalaraAPI] = None
+        self.quickbase_api: Optional[AsyncQuickBaseAPI] = None
 
         # Connection state tracking
         self.sf_connected = False
         self.woo_connected = False
         self.avalara_connected = False
+        self.quickbase_connected = False
         
         # Initialize APIs
         self._initialize_apis()
@@ -61,6 +64,10 @@ class ConnectionManager(QObject):
             # Initialize Avalara API
             logger.info("[CONNECTION-MANAGER] Initializing Avalara API")
             self.avalara_api = AsyncAvalaraAPI(verbose_logging=False)
+
+            # Initialize QuickBase API
+            logger.info("[CONNECTION-MANAGER] Initializing QuickBase API")
+            self.quickbase_api = AsyncQuickBaseAPI(verbose_logging=False)
 
 
         except Exception as e:
@@ -96,6 +103,12 @@ class ConnectionManager(QObject):
                 async with AsyncAvalaraAPI() as fresh_api:
                     result = await fresh_api.test_connection()
 
+            elif api_type == 'quickbase':
+                if not self.quickbase_api:
+                    return {'success': False, 'error': 'No QuickBase API instance'}
+                # Create fresh API instance for connection test
+                async with AsyncQuickBaseAPI() as fresh_api:
+                    result = await fresh_api.test_connection()
 
             else:
                 return {'success': False, 'error': f'Unknown API type: {api_type}'}
@@ -108,6 +121,8 @@ class ConnectionManager(QObject):
                 self.woo_connected = success
             elif api_type == 'avalara':
                 self.avalara_connected = success
+            elif api_type == 'quickbase':
+                self.quickbase_connected = success
 
             # Emit status change signal
             self.connection_status_changed.emit(api_type, success)
@@ -137,13 +152,15 @@ class ConnectionManager(QObject):
             self.test_connection('salesforce'),
             self.test_connection('woocommerce'),
             self.test_connection('avalara'),
+            self.test_connection('quickbase'),
             return_exceptions=True
         )
 
         return {
             'salesforce': results[0] if not isinstance(results[0], Exception) else {'success': False, 'error': str(results[0])},
             'woocommerce': results[1] if not isinstance(results[1], Exception) else {'success': False, 'error': str(results[1])},
-            'avalara': results[2] if not isinstance(results[2], Exception) else {'success': False, 'error': str(results[2])}
+            'avalara': results[2] if not isinstance(results[2], Exception) else {'success': False, 'error': str(results[2])},
+            'quickbase': results[3] if not isinstance(results[3], Exception) else {'success': False, 'error': str(results[3])}
         }
     
     def get_connection_status(self, api_type: str) -> bool:
@@ -154,6 +171,8 @@ class ConnectionManager(QObject):
             return self.woo_connected
         elif api_type == 'avalara':
             return self.avalara_connected
+        elif api_type == 'quickbase':
+            return self.quickbase_connected
         else:
             return False
     
@@ -163,6 +182,7 @@ class ConnectionManager(QObject):
             'salesforce': self.sf_connected,
             'woocommerce': self.woo_connected,
             'avalara': self.avalara_connected,
+            'quickbase': self.quickbase_connected
         }
     
     def get_api_instance(self, api_type: str):
@@ -173,6 +193,8 @@ class ConnectionManager(QObject):
             return self.woo_api
         elif api_type == 'avalara':
             return self.avalara_api
+        elif api_type == 'quickbase':
+            return self.quickbase_api
         else:
             return None
     

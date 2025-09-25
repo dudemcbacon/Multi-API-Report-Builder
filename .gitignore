@@ -194,7 +194,6 @@ data/
 
 # Claude documentation (as requested)
 CLAUDE.md
-@CLAUDE.md
 
 # ShareFile integration temp files
 sharefile_temp/
