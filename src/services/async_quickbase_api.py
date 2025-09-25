@@ -1,53 +1,50 @@
 """
-Simple Async QuickBase API implementation using aiohttp only
-Thread-safe implementation following Avalara/WooCommerce patterns
+Simple AsyncQuickBaseAPI wrapper using the quickbase-client library
+Replaces 549 lines of complex HTTP code with ~50 lines using proper library
 """
 import asyncio
-import aiohttp
 import logging
 import os
-from typing import Dict, List, Optional, Any
 import polars as pl
-import json
+from typing import Dict, List, Optional, Any
+from concurrent.futures import ThreadPoolExecutor
 
-# Load environment variables from .env file
+try:
+    from quickbase_client import QuickBaseApiClient
+except ImportError:
+    raise ImportError("quickbase-client library not found. Install with: pip install quickbase-client")
+
+# Load environment variables
 try:
     from dotenv import load_dotenv
     load_dotenv('.env')
 except ImportError:
-    pass  # dotenv not available, use system environment variables
+    pass
 
 logger = logging.getLogger(__name__)
 
 class AsyncQuickBaseAPI:
     """
-    Simple async QuickBase API client using only aiohttp
-    Thread-safe implementation for PyQt compatibility
+    Simple async wrapper around QuickBaseApiClient
+    Provides async interface for PyQt compatibility
     """
-
-    # Secure credential management - use environment variables
-    REALM_HOSTNAME = os.getenv('QUICKBASE_REALM_HOSTNAME')
-    USER_TOKEN = os.getenv('QUICKBASE_USER_TOKEN')
-    DEFAULT_APP_ID = os.getenv('QUICKBASE_APP_ID')
 
     def __init__(self, realm_hostname: str = None, user_token: str = None,
                  app_id: str = None, verbose_logging: bool = False):
-        """
-        Initialize Simple QuickBase API client
+        # Get credentials from environment if not provided
+        self.realm_hostname = realm_hostname or os.getenv('QUICKBASE_REALM_HOSTNAME')
+        self.user_token = user_token or os.getenv('QUICKBASE_USER_TOKEN')
+        self.default_app_id = app_id or os.getenv('QUICKBASE_APP_ID')
 
-        Args:
-            realm_hostname: QuickBase realm hostname (e.g., 'company.quickbase.com')
-            user_token: QuickBase user token for authentication
-            app_id: Default application ID
-            verbose_logging: Enable detailed logging for debugging
-        """
-        self.realm_hostname = realm_hostname or self.REALM_HOSTNAME
-        self.user_token = user_token or self.USER_TOKEN
-        self.default_app_id = app_id or self.DEFAULT_APP_ID
-        self.verbose_logging = verbose_logging
+        if not self.realm_hostname or not self.user_token:
+            raise ValueError("QuickBase realm_hostname and user_token are required")
 
-        # Only aiohttp session - no external client libraries
-        self.session: Optional[aiohttp.ClientSession] = None
+        # Create thread pool for async operations
+        self.executor = ThreadPoolExecutor(max_workers=1)
+        self._client = None
+
+        if verbose_logging:
+            logging.getLogger('quickbase_client').setLevel(logging.DEBUG)
 
     async def __aenter__(self):
         """Async context manager entry"""
@@ -59,178 +56,156 @@ class AsyncQuickBaseAPI:
         await self.close()
 
     async def connect(self):
-        """Establish connection to QuickBase API using only aiohttp"""
-        try:
-            if not self.session:
-                # Create aiohttp session with QuickBase headers
-                timeout = aiohttp.ClientTimeout(total=300)  # 5 minute timeout
-                self.session = aiohttp.ClientSession(
-                    timeout=timeout,
-                    headers={
-                        'QB-Realm-Hostname': self.realm_hostname,
-                        'Authorization': f'QB-USER-TOKEN {self.user_token}',
-                        'Content-Type': 'application/json',
-                        'User-Agent': 'SalesForceReportPull-AsyncAPI/1.0'
-                    }
-                )
+        """Initialize the QuickBase client"""
+        def _create_client():
+            return QuickBaseApiClient(
+                user_token=self.user_token,
+                realm_hostname=self.realm_hostname
+            )
 
-            if self.verbose_logging:
-                logger.info("[ASYNC-QB-API] Connected to QuickBase API")
-
-        except Exception as e:
-            logger.error(f"[ASYNC-QB-API] Connection error: {e}")
-            raise
+        self._client = await asyncio.get_event_loop().run_in_executor(
+            self.executor, _create_client
+        )
+        logger.info(f"[QB-API] Connected to QuickBase realm: {self.realm_hostname}")
 
     async def close(self):
-        """Close QuickBase API connection"""
+        """Close the client and executor"""
+        if self.executor:
+            self.executor.shutdown(wait=False)
+        logger.info("[QB-API] Connection closed")
+
+    async def test_connection(self) -> Dict[str, Any]:
+        """Test the connection by fetching tables"""
         try:
-            if self.session:
-                await self.session.close()
-                self.session = None
+            if not self._client:
+                await self.connect()
 
-            if self.verbose_logging:
-                logger.info("[ASYNC-QB-API] Connection closed")
+            def _test():
+                response = self._client.get_tables_for_app(self.default_app_id)
+                if response.ok:
+                    tables_data = response.json()
+                    return len(tables_data)
+                else:
+                    raise Exception(f"QuickBase API error: {response.status_code} - {response.text}")
 
-        except Exception as e:
-            logger.error(f"[ASYNC-QB-API] Error closing connection: {e}")
-
-    def validate_credentials(self) -> Dict[str, Any]:
-        """Validate QuickBase credentials without making HTTP requests (thread-safe)"""
-        try:
-            # Basic validation without network calls
-            if not self.realm_hostname:
-                return {
-                    'success': False,
-                    'error': 'QuickBase realm hostname not configured',
-                    'validated': False
-                }
-
-            if not self.user_token:
-                return {
-                    'success': False,
-                    'error': 'QuickBase user token not configured',
-                    'validated': False
-                }
-
-            # Basic format validation
-            if not self.realm_hostname.endswith('.quickbase.com'):
-                return {
-                    'success': False,
-                    'error': 'Invalid QuickBase realm hostname format',
-                    'validated': False
-                }
-
-            if len(self.user_token) < 20:  # QuickBase tokens are typically longer
-                return {
-                    'success': False,
-                    'error': 'QuickBase user token appears to be invalid format',
-                    'validated': False
-                }
+            table_count = await asyncio.get_event_loop().run_in_executor(
+                self.executor, _test
+            )
 
             return {
                 'success': True,
-                'message': 'QuickBase credentials appear valid',
-                'validated': True,
-                'realm_hostname': self.realm_hostname,
-                'has_app_id': bool(self.default_app_id)
+                'message': f'Connected successfully. Found {table_count} tables.',
+                'table_count': table_count
             }
-
         except Exception as e:
-            logger.error(f"[ASYNC-QB-API] Error validating credentials: {e}")
-            return {
-                'success': False,
-                'error': f'Credential validation error: {str(e)}',
-                'validated': False
-            }
-
-    async def test_connection(self) -> Dict[str, Any]:
-        """
-        Test connection to QuickBase API using simple HTTP request
-
-        Returns:
-            Dictionary with connection test results
-        """
-        try:
-            logger.info("[ASYNC-QB-API] Testing QuickBase connection")
-
-            if not self.session:
-                await self.connect()
-
-            # Simple ping to QuickBase API to test connection
-            url = "https://api.quickbase.com/v1/apps"
-
-            async with self.session.get(url) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    app_count = len(data.get('apps', []))
-
-                    return {
-                        'success': True,
-                        'message': f'Successfully connected to QuickBase',
-                        'details': {
-                            'realm': self.realm_hostname,
-                            'apps_found': app_count
-                        }
-                    }
-                else:
-                    error_text = await response.text()
-                    return {
-                        'success': False,
-                        'message': f'QuickBase API error: {response.status}',
-                        'details': error_text
-                    }
-
-        except Exception as e:
-            logger.error(f"[ASYNC-QB-API] Connection test failed: {e}")
-            return {
-                'success': False,
-                'message': f'Connection test failed: {str(e)}',
-                'details': None
-            }
+            return {'success': False, 'error': str(e)}
 
     async def get_apps(self) -> List[Dict[str, Any]]:
-        """
-        Get list of available QuickBase applications
-        Simple implementation for basic functionality
-        """
-        try:
-            if not self.session:
-                await self.connect()
+        """Get tables (we use tables as apps in the tree)"""
+        if not self._client:
+            await self.connect()
 
-            url = "https://api.quickbase.com/v1/apps"
+        def _get_tables():
+            response = self._client.get_tables_for_app(self.default_app_id)
+            if response.ok:
+                tables_data = response.json()
+                return [
+                    {
+                        'id': table['id'],
+                        'table_id': table['id'],
+                        'name': table['name'],
+                        'icon': 'fa5s.table',
+                        'data_type': 'quickbase_table',
+                        'pluralRecordName': table.get('pluralRecordName', 'Records'),
+                        'updated': table.get('updated', '')
+                    }
+                    for table in tables_data
+                ]
+            else:
+                raise Exception(f"QuickBase API error: {response.status_code} - {response.text}")
 
-            async with self.session.get(url) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get('apps', [])
-                else:
-                    logger.error(f"[ASYNC-QB-API] Failed to get apps: {response.status}")
-                    return []
+        return await asyncio.get_event_loop().run_in_executor(
+            self.executor, _get_tables
+        )
 
-        except Exception as e:
-            logger.error(f"[ASYNC-QB-API] Error getting apps: {e}")
-            return []
+    async def get_reports(self, table_id: str) -> List[Dict[str, Any]]:
+        """Get reports for a table"""
+        if not self._client:
+            await self.connect()
 
-    def get_static_data_sources(self) -> List[Dict[str, Any]]:
-        """
-        Get static data sources for tree population
-        No network calls - completely thread safe
-        """
-        return [
-            {
-                'id': 'quickbase_apps',
-                'name': 'Applications',
-                'type': 'browse',
-                'data_type': 'apps',
-                'icon': 'fa5s.folder',
-                'modified': ''
-            },
-            {
-                'id': 'quickbase_query',
-                'name': 'Custom Query Builder',
-                'type': 'query_builder',
-                'data_type': 'query',
-                'icon': 'fa5s.search',
-                'modified': ''
-            }
-        ]
+        def _get_reports():
+            response = self._client.get_reports_for_table(table_id)
+            if response.ok:
+                reports_data = response.json()
+                return [
+                    {
+                        'id': report['id'],
+                        'report_id': report['id'],
+                        'name': report['name'],
+                        'icon': 'fa5s.file-alt',
+                        'data_type': 'quickbase_report',
+                        'table_id': table_id
+                    }
+                    for report in reports_data
+                ]
+            else:
+                raise Exception(f"QuickBase API error: {response.status_code} - {response.text}")
+
+        return await asyncio.get_event_loop().run_in_executor(
+            self.executor, _get_reports
+        )
+
+    async def get_report_data(self, table_id: str, report_id: str = None) -> pl.DataFrame:
+        """Get data from a report or table"""
+        if not self._client:
+            await self.connect()
+
+        def _get_data():
+            if report_id:
+                # Get report data
+                response = self._client.run_report(report_id, table_id)
+            else:
+                # Get table data (query all records)
+                response = self._client.query(table_id=table_id)
+
+            if not response.ok:
+                raise Exception(f"QuickBase API error: {response.status_code} - {response.text}")
+
+            # Convert response to JSON
+            result = response.json()
+
+            # Convert to Polars DataFrame
+            if result and 'data' in result:
+                records = result['data']
+                if records:
+                    # Build field ID to label mapping
+                    field_map = {}
+                    if 'fields' in result:
+                        for field in result['fields']:
+                            field_map[str(field['id'])] = field['label']
+
+                    # Extract field data into flat dictionary with descriptive column names
+                    flattened_records = []
+                    for record in records:
+                        flat_record = {}
+                        for field_id, field_data in record.items():
+                            # Use field label if available, otherwise fall back to field ID
+                            column_name = field_map.get(field_id, field_id)
+                            if isinstance(field_data, dict) and 'value' in field_data:
+                                flat_record[column_name] = field_data['value']
+                            else:
+                                flat_record[column_name] = field_data
+                        flattened_records.append(flat_record)
+
+                    return pl.DataFrame(flattened_records)
+
+            return pl.DataFrame()  # Empty DataFrame if no data
+
+        return await asyncio.get_event_loop().run_in_executor(
+            self.executor, _get_data
+        )
+
+    # Keep these methods for compatibility with existing code
+    async def get_tables(self, app_id: str) -> List[Dict[str, Any]]:
+        """Compatibility method - same as get_apps"""
+        return await self.get_apps()
