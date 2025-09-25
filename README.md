@@ -1,141 +1,223 @@
-# ROI Calculator
+# Multi API Report Builder
 
-A professional web application for calculating the Return on Investment (ROI) of automation projects. This tool provides comprehensive financial analysis including cost-benefit calculations, payback period analysis, and 5-year projections.
+A powerful PyQt6-based desktop application for integrating and analyzing data from multiple business APIs including Salesforce, WooCommerce, Avalara, and QuickBase.
 
 ## Features
 
-- **Interactive ROI Calculations** - Real-time calculations as you input parameters
-- **Project-Specific Analysis** - Customizable project names and parameters for multiple automation projects
-- **Comprehensive Analysis** - Covers development costs, time savings, error reduction, and operational benefits
-- **5-Year Projections** - Long-term financial forecasting with salary increase adjustments
-- **Professional Reports** - Generate detailed PDF-ready reports for stakeholders
-- **Print Functionality** - Print summary or full detailed reports
-- **Data Persistence** - Automatically saves your inputs locally
-- **Responsive Design** - Works on desktop, tablet, and mobile devices
+### 🔌 Multi-API Integration
+- **Salesforce**: Access reports and data with OAuth2 authentication
+- **WooCommerce**: Retrieve products, orders, customers, and more via REST API
+- **Avalara**: Fetch tax transactions and compliance data
+- **QuickBase**: Query tables and reports with field metadata support
 
-## Live Demo
+### 📊 Data Management
+- Unified tree view for browsing all connected data sources
+- Real-time data loading with progress indicators
+- Polars DataFrame backend for efficient data processing
+- Export capabilities to CSV and Excel formats
+- Date range filtering for time-based queries
 
-Open `index.html` in any modern web browser to start using the calculator.
+### 🚀 Performance Optimizations
+- Asynchronous data loading with worker threads
+- Connection pooling and session reuse
+- Intelligent caching for metadata
+- Batch processing for large datasets
+- Optimized tree population to prevent redundant updates
 
-## Project Structure
+### 🎨 User Interface
+- Dark theme support via QDarkStyle
+- Tabbed interface for different operations
+- Status bar with connection indicators
+- Token management and connection status display
+- Responsive design with progress feedback
 
-```
-ROI Calculator/
-├── index.html          # Main application entry point
-├── css/
-│   ├── styles.css      # Main application styles
-│   └── print.css       # Print-specific styles
-├── js/
-│   ├── app.js          # Main application controller
-│   ├── calculator.js   # Core calculation logic
-│   ├── config.js       # Configuration and constants
-│   ├── report.js       # Report generation
-│   └── ui.js           # User interface management
-└── README.md           # This file
-```
-
-## Getting Started
+## Installation
 
 ### Prerequisites
+- Python 3.8 or higher
+- Windows, macOS, or Linux
 
-- Any modern web browser (Chrome, Firefox, Safari, Edge)
-- No server or installation required
+### Setup
 
-### Installation
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/QuiQuig/ROI-Calculator-.git
-   cd ROI-Calculator-
-   ```
-
-2. **Open in browser:**
-   - Double-click `index.html`
-   - Or open your browser and navigate to the file
-
-### Usage
-
-1. **Input Parameters:**
-   - Enter a project name to customize your analysis
-   - Configure your team size and hourly rates
-   - Enter development costs and timeline
-   - Specify current manual process times
-   - Set error rates and maintenance costs
-
-2. **View Results:**
-   - Real-time ROI calculations update as you type
-   - Review the executive summary dashboard
-   - Analyze the 5-year financial projection
-
-3. **Generate Reports:**
-   - Click "Generate Full Report" for detailed analysis
-   - Use "Print Summary" for quick overview
-   - Use "Print Generated Report" for comprehensive documentation
-
-## Key Calculations
-
-### Time Savings
-- Calculates hours saved per user/month through automation
-- Accounts for elimination of various manual processes:
-  - Report formatting and data export
-  - Data corrections and reconciliation
-  - Multi-source data processing
-  - File management operations
-  - Administrative tie-out processes
-  - Manual consolidation tasks
-
-### Cost Analysis
-- **Labor Savings:** Hourly rate × time saved × team size
-- **Error Reduction:** Number of errors × cost per error
-- **Development Costs:** Developer time × hourly rate
-- **Ongoing Costs:** Annual maintenance and support
-
-### ROI Metrics
-- **Payback Period:** Time to recover implementation costs
-- **Year 1 ROI:** (Annual savings - costs) / implementation cost
-- **5-Year Projection:** Long-term financial impact with salary adjustments
-
-## Customization
-
-### Modifying Default Values
-Edit `js/config.js` to change default input values:
-
-```javascript
-defaults: {
-    projectName: 'My Automation Project',
-    teamSize: 5,
-    hourlyRate: 35,
-    devMonths: 3,
-    // ... other defaults
-}
+1. Clone the repository:
+```bash
+git clone https://github.com/QuiQuig/Multi-API-Report-Builder.git
+cd Multi-API-Report-Builder
 ```
 
-### Adding New Input Fields
-1. Add field configuration to `CONFIG.inputs` in `config.js`
-2. The UI will automatically generate the input field
-3. Update calculation logic in `calculator.js` if needed
+2. Create a virtual environment (recommended):
+```bash
+python -m venv venv
+venv\Scripts\activate  # On Windows
+# or
+source venv/bin/activate  # On macOS/Linux
+```
 
-### Styling
-- Modify `css/styles.css` for appearance changes
-- Update `css/print.css` for print layout adjustments
-- CSS custom properties in `:root` control theme colors
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
-## Browser Compatibility
+4. Configure environment variables:
+Create a `.env` file in the project root with your API credentials:
 
-- Chrome 60+
-- Firefox 55+
-- Safari 12+
-- Edge 79+
+```env
+# Salesforce Configuration
+SALESFORCE_CLIENT_ID=your_client_id
+SALESFORCE_CLIENT_SECRET=your_client_secret
+SALESFORCE_REDIRECT_URI=http://localhost:8080/callback
 
-## Data Privacy
+# WooCommerce Configuration
+WOOCOMMERCE_URL=https://your-store.com
+WOOCOMMERCE_CONSUMER_KEY=your_consumer_key
+WOOCOMMERCE_CONSUMER_SECRET=your_consumer_secret
 
-- All data is stored locally in your browser
-- No information is sent to external servers
-- Data persists between sessions using localStorage
+# Avalara Configuration
+AVALARA_ACCOUNT_ID=your_account_id
+AVALARA_LICENSE_KEY=your_license_key
+AVALARA_COMPANY_CODE=your_company_code
+AVALARA_ENVIRONMENT=sandbox  # or production
 
-## Contributing
+# QuickBase Configuration
+QUICKBASE_REALM_HOSTNAME=your-realm.quickbase.com
+QUICKBASE_USER_TOKEN=your_user_token
+QUICKBASE_APP_ID=your_app_id
+```
 
-This is a private project. For suggestions or issues, please contact the project owner.
+## Usage
+
+### Starting the Application
+
+```bash
+python launch.py
+```
+
+### Connecting to APIs
+
+1. The application will attempt to auto-connect to configured APIs on startup
+2. Manual connection available through the UI for each API
+3. Connection status displayed in the toolbar
+
+### Loading Data
+
+1. **Browse Data Sources**: Navigate the unified tree view in the Source Data tab
+2. **Select Report/Table**: Double-click any report or data source to load
+3. **Apply Filters**: Use date range selector for time-based filtering
+4. **View Results**: Data appears in the table view with sortable columns
+
+### Exporting Data
+
+1. Load desired data into the table view
+2. Click "Export to CSV" or "Export to Excel"
+3. Choose save location
+4. Data exported with all current filters applied
+
+## Architecture
+
+### Project Structure
+
+```
+Multi-API-Report-Builder/
+├── src/
+│   ├── services/          # API service implementations
+│   │   ├── async_salesforce_api.py
+│   │   ├── async_woocommerce_api.py
+│   │   ├── async_avalara_api.py
+│   │   └── async_quickbase_api.py
+│   ├── ui/
+│   │   ├── main_window.py # Main application window
+│   │   ├── workers.py      # Async worker threads
+│   │   ├── managers/       # UI state managers
+│   │   │   ├── connection_manager.py
+│   │   │   ├── data_source_manager.py
+│   │   │   ├── status_manager.py
+│   │   │   └── tree_population_manager.py
+│   │   ├── tabs/           # Tab implementations
+│   │   └── operations/     # Business operations
+│   ├── config/
+│   │   └── app_config.py   # Application configuration
+│   └── utils/              # Utility functions
+├── tests/                  # Test suite
+├── docs/                   # Documentation
+├── requirements.txt        # Python dependencies
+├── .env                    # Environment variables (create this)
+└── launch.py              # Application entry point
+```
+
+### Key Technologies
+
+- **PyQt6**: Desktop GUI framework
+- **Polars**: High-performance DataFrame library
+- **aiohttp**: Async HTTP client
+- **quickbase-client**: QuickBase API integration
+- **simple-salesforce**: Salesforce API wrapper
+- **python-dotenv**: Environment variable management
+- **QDarkStyle**: Dark theme styling
+
+## API-Specific Features
+
+### Salesforce
+- OAuth2 authentication flow
+- Report and dashboard access
+- SOQL query support
+- Metadata caching for performance
+
+### WooCommerce
+- REST API v3 support
+- Product, order, and customer data
+- Pagination handling
+- Date-based filtering
+
+### Avalara
+- AvaTax API integration
+- Transaction retrieval
+- Company and jurisdiction data
+- Tax code lookups
+
+### QuickBase
+- Table and report browsing
+- Field metadata extraction
+- Descriptive column headers
+- Query builder support
+
+## Development
+
+### Running Tests
+
+```bash
+pytest tests/
+```
+
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests
+5. Submit a pull request
+
+### Building for Distribution
+
+```bash
+# Create standalone executable (Windows)
+pyinstaller --onefile --windowed launch.py
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Connection Errors**: Verify API credentials in `.env` file
+2. **Tree Not Displaying**: Check API connection status in toolbar
+3. **Data Not Loading**: Ensure proper permissions for API tokens
+4. **Export Failures**: Verify write permissions for output directory
+
+### Debug Mode
+
+Set logging level in `launch.py`:
+```python
+logging.basicConfig(level=logging.DEBUG)
+```
 
 ## License
 
@@ -143,10 +225,21 @@ This project is proprietary software. All rights reserved.
 
 ## Support
 
-For questions or support, please contact the development team.
+For issues and questions, please open an issue on [GitHub](https://github.com/QuiQuig/Multi-API-Report-Builder/issues).
+
+## Changelog
+
+### Latest Updates
+- Added QuickBase API integration
+- Fixed field headers to show descriptive names
+- Optimized tree population to prevent race conditions
+- Improved connection management for all APIs
+- Enhanced error handling and logging
+
+## Author
+
+Quinn Quigley
 
 ---
 
-**Built for:** Automation Project ROI Analysis  
-**Technology:** Vanilla HTML5, CSS3, JavaScript (ES6+)  
-**Version:** 1.0.0
+Built with Python and PyQt6 for efficient multi-API data integration and analysis.
