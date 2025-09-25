@@ -4,27 +4,27 @@ A powerful PyQt6-based desktop application for integrating and analyzing data fr
 
 ## Features
 
-### 🔌 Multi-API Integration
+### Multi-API Integration
 - **Salesforce**: Access reports and data with OAuth2 authentication
 - **WooCommerce**: Retrieve products, orders, customers, and more via REST API
 - **Avalara**: Fetch tax transactions and compliance data
 - **QuickBase**: Query tables and reports with field metadata support
 
-### 📊 Data Management
+### Data Management
 - Unified tree view for browsing all connected data sources
 - Real-time data loading with progress indicators
 - Polars DataFrame backend for efficient data processing
 - Export capabilities to CSV and Excel formats
 - Date range filtering for time-based queries
 
-### 🚀 Performance Optimizations
+### Performance Optimizations
 - Asynchronous data loading with worker threads
 - Connection pooling and session reuse
 - Intelligent caching for metadata
 - Batch processing for large datasets
 - Optimized tree population to prevent redundant updates
 
-### 🎨 User Interface
+### User Interface
 - Dark theme support via QDarkStyle
 - Tabbed interface for different operations
 - Status bar with connection indicators
