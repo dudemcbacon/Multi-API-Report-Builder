@@ -20,7 +20,7 @@ class QuickBasePermissionAudit:
     """Test different permission levels and operations"""
 
     def __init__(self):
-        self.realm_hostname = 'example.quickbase.com'  # From diagnostic - this one works for auth
+        self.realm_hostname = os.getenv('QUICKBASE_REALM_HOSTNAME', 'example.quickbase.com')
         self.user_token = os.getenv('QUICKBASE_USER_TOKEN')
         self.app_id = os.getenv('QUICKBASE_APP_ID', 'YOUR_APP_ID')
         self.base_url = "https://api.quickbase.com/v1"
@@ -77,7 +77,7 @@ class QuickBasePermissionAudit:
             # Test 2: Try common table IDs (QuickBase apps often have standard table IDs)
             common_table_tests = []
             # Common table IDs to try (QuickBase often uses predictable IDs)
-            common_table_ids = ['YOUR_APP_ID', 'test_table_1', 'test_table_2', 'test_table_3']  # App ID + common suffixes
+            common_table_ids = ['YOUR_APP_ID', 'test_table_1', 'test_table_2', 'test_table_3']  # Replace with your table IDs
 
             for table_id in common_table_ids:
                 common_table_tests.extend([

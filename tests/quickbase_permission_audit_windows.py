@@ -20,7 +20,7 @@ class QuickBasePermissionAudit:
     """Test different permission levels and operations"""
 
     def __init__(self):
-        self.realm_hostname = 'example.quickbase.com'  # From diagnostic - this one works for auth
+        self.realm_hostname = os.getenv('QUICKBASE_REALM_HOSTNAME', 'example.quickbase.com')
         self.user_token = os.getenv('QUICKBASE_USER_TOKEN')
         self.app_id = os.getenv('QUICKBASE_APP_ID', 'YOUR_APP_ID')
         self.base_url = "https://api.quickbase.com/v1"
