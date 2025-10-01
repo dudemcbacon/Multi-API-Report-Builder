@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "WebFetch(domain:developer.salesforce.com)",
+      "Bash(cd:*)",
+      "Bash(pip3 install:*)",
+      "Bash(mkdir:*)",
+      "Bash(python:*)",
+      "Bash(find:*)",
+      "Bash(rm:*)",
+      "Read(/C:\\Users\\Quinn\\OneDrive - CompanyName\\Desktop\\Projects\\Operations\\SalesForceReportPull/**)",
+      "Bash(git add:*)",
+      "WebFetch(domain:developer.quickbase.com)",
+      "WebSearch",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:github.com)",
+      "Bash(timeout:*)",
+      "Read(/~/.config/SalesforceReportPull/**)",
+      "Bash(taskkill:*)",
+      "Bash(tasklist)",
+      "Bash(findstr:*)",
+      "Bash(git commit:*)",
+      "Bash(gh repo create:*)",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(if exist .venv rmdir /s /q .venv)",
+      "Bash(powershell:*)",
+      "WebFetch(domain:helpv2.quickbase.com)",
+      "WebFetch(domain:help.quickbase.com)",
+      "WebFetch(domain:quickbase-client.readthedocs.io)",
+      "Read(/~/OneDrive - CompanyName/Desktop/Projects/Operations/Operations Automation Tool/**)",
+      "Bash(git check-ignore:*)",
+      "Bash(git rm:*)"
+    ],
+    "deny": []
+  }
+}
