@@ -220,3 +220,21 @@ dev_settings.py
 # Test output
 test_results/
 test_output/
+
+# Claude Code local settings (user-specific)
+.claude/
+
+# Internal planning and development documents (not for public repo)
+PROJECT_PLAN.md
+docs/SECURITY_ANALYSIS_REPORT.md
+docs/SECURITY_AUDIT_SUMMARY.md
+docs/QUICKBASE_INTEGRATION_REPORT.md
+docs/*COMPLETE.md
+docs/*FIX*.md
+docs/*SUMMARY.md
+docs/*OPTIMIZATION*.md
+docs/*IMPROVEMENTS*.md
+docs/async_migration_guide.md
+
+# Test cleanup reports (internal documentation)
+tests/TEST_CLEANUP_REPORT.md
