@@ -10,6 +10,7 @@ quickbase-client>=0.9.0
 httpx>=0.24.0
 requests>=2.31.0
 aiohttp>=3.9.0
+simple_salesforce
 
 # Data & Export
 openpyxl>=3.1.0
